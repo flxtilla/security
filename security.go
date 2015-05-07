@@ -4,8 +4,9 @@ import (
 	"fmt"
 
 	"github.com/thrisp/flotilla"
-	"github.com/thrisp/login"
-	"github.com/thrisp/principal"
+
+	"github.com/thrisp/security/login"
+	"github.com/thrisp/security/principal"
 )
 
 var (

@@ -1,26 +1,10 @@
 package security
 
-import (
-	"errors"
-
-	"github.com/thrisp/login"
-)
-
-type UserDataStore interface {
-	Get(string) User
-	Put(User) (User, error)
-	Delete(User) error
-}
-
+/*
 func getLoginUserFunc(d DataStore) func(string) login.User {
 	return func(s string) login.User {
 		return d.Get(s).(login.User)
 	}
-}
-
-type RoleDataStore interface {
-	//CreateRole(...string) error
-	//GetRole(string) Role
 }
 
 type DataStore interface {
@@ -51,3 +35,4 @@ func (t *DefaultDataStore) Delete(User) error {
 //func (t *DefaultDataStore) GetRole(string) Role {
 //	return nil
 //}
+*/

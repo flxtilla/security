@@ -7,6 +7,7 @@ import (
 
 	"github.com/thrisp/flotilla"
 	"github.com/thrisp/flotilla/session"
+	"github.com/thrisp/security/user"
 )
 
 type (
@@ -14,7 +15,7 @@ type (
 
 	Manager struct {
 		s          session.SessionStore
-		userloader func(string) User
+		userloader func(string) user.User
 		App        *flotilla.App
 		Settings   map[string]string
 		Handlers   map[string]flotilla.Manage
@@ -51,7 +52,7 @@ type loginfxtension struct {
 func MakeLoginFxtension(m *Manager) flotilla.Fxtension {
 	lf := &loginfxtension{name: "fxlogin", fns: make(map[string]reflect.Value)}
 	lf.fns["loginmanager"] = reflect.ValueOf(func(c flotilla.Ctx) *Manager { m.Reload(c); return m })
-	lf.fns["currentuser"] = reflect.ValueOf(func(c flotilla.Ctx) User { return currentuser(c) })
+	lf.fns["currentuser"] = reflect.ValueOf(func(c flotilla.Ctx) user.User { return currentuser(c) })
 	return lf
 }
 
@@ -109,25 +110,25 @@ func (m *Manager) currentuserid() string {
 	return ""
 }
 
-func currentuser(c flotilla.Ctx) User {
+func currentuser(c flotilla.Ctx) user.User {
 	return manager(c).CurrentUser()
 }
 
-func (m *Manager) CurrentUser() User {
+func (m *Manager) CurrentUser() user.User {
 	if usr := m.s.Get("user"); usr == nil {
 		m.reloaduser()
 	}
-	user := m.s.Get("user")
-	return user.(User)
+	u := m.s.Get("user")
+	return u.(user.User)
 }
 
-func (m *Manager) LoginUser(user User, remember bool, fresh bool) bool {
-	if !user.IsActive() {
+func (m *Manager) LoginUser(u user.User, remember bool, fresh bool) bool {
+	if !u.Active() {
 		return false
 	}
-	m.s.Set("user_id", user.GetId())
+	m.s.Set("user_id", u.Id())
 	m.s.Set("_fresh", fresh)
-	m.s.Set("user", user)
+	m.s.Set("user", u)
 	if remember {
 		m.s.Set("remember", "set")
 	}
@@ -142,11 +143,11 @@ func (m *Manager) LogoutUser() bool {
 	return true
 }
 
-func (m *Manager) UserLoader(userid string) User {
+func (m *Manager) UserLoader(userid string) user.User {
 	if u := m.userloader; u != nil {
 		return u(userid)
 	}
-	return AnonymousUser
+	return user.AnonymousUser
 }
 
 func (m *Manager) reloaduser() {
@@ -158,7 +159,6 @@ func (m *Manager) loaduser(userid string) {
 }
 
 func (m *Manager) Unauthenticated(c flotilla.Ctx) {
-	//c.Flash(m.Setting("message_category"), m.Setting("unauthenticated_message"))
 	c.Call("flash", m.Setting("message_category"), m.Setting("unauthenticated_message"))
 	if h := m.Handlers["unauthenticated"]; h != nil {
 		h(c)
@@ -180,7 +180,7 @@ func manager(c flotilla.Ctx) *Manager {
 func RequireLogin(c flotilla.Ctx) {
 	m := manager(c)
 	currentuser := m.CurrentUser()
-	if !currentuser.IsAuthenticated() {
+	if !currentuser.Authenticated() {
 		m.Unauthenticated(c)
 	}
 }
@@ -190,7 +190,7 @@ func RequireLogin(c flotilla.Ctx) {
 func LoginRequired(h flotilla.Manage) flotilla.Manage {
 	return func(c flotilla.Ctx) {
 		m := manager(c)
-		if m.CurrentUser().IsAuthenticated() {
+		if m.CurrentUser().Authenticated() {
 			h(c)
 		} else {
 			m.Unauthenticated(c)

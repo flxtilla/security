@@ -6,37 +6,42 @@ import (
 	"testing"
 
 	"github.com/thrisp/flotilla"
+	"github.com/thrisp/security/principal"
+	"github.com/thrisp/security/user"
 )
 
 type Tuser struct {
+	principal.Identity
 	username string
 	active   bool
 }
 
-func (u *Tuser) IsAuthenticated() bool {
+func (u *Tuser) Authenticated() bool {
 	return true
 }
 
-func (u *Tuser) IsActive() bool {
+func (u *Tuser) Active() bool {
 	return u.active
 }
 
-func (u *Tuser) IsAnonymous() bool {
+func (u *Tuser) Anonymous() bool {
 	return false
 }
 
-func (u *Tuser) GetId() string {
+func (u *Tuser) Id() string {
 	return u.username
 }
 
-var tusers map[string]*Tuser = map[string]*Tuser{"one": &Tuser{username: "User_One", active: true},
-	"two": &Tuser{username: "User_Two"}}
+var tusers map[string]*Tuser = map[string]*Tuser{
+	"one": &Tuser{username: "User_One", active: true},
+	"two": &Tuser{username: "User_Two"},
+}
 
-func InMemoryUserLoader(s string) User {
+func InMemoryUserLoader(s string) user.User {
 	if u, ok := tusers[s]; ok {
 		return u
 	}
-	return AnonymousUser
+	return user.AnonymousUser
 }
 
 func PerformRequest(r http.Handler, method, path string) *httptest.ResponseRecorder {
@@ -106,7 +111,7 @@ func TestLogin(t *testing.T) {
 		m := l.(*Manager)
 		u := tusers["one"]
 		m.LoginUser(u, true, true)
-		if id := m.CurrentUser().GetId(); id == u.username {
+		if id := m.CurrentUser().Id(); id == u.username {
 			loggedin = true
 		}
 		c.Call("serveplain", 200, []byte("success"))
@@ -126,7 +131,7 @@ func TestLogout(t *testing.T) {
 		u := tusers["one"]
 		m.LoginUser(u, false, false)
 		m.LogoutUser()
-		if id := m.CurrentUser().GetId(); id == u.username {
+		if id := m.CurrentUser().Id(); id == u.username {
 			loggedin = true
 		}
 		c.Call("serveplain", 200, []byte("success"))

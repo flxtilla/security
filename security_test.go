@@ -5,44 +5,11 @@ import (
 	"testing"
 
 	"github.com/thrisp/flotilla"
-	"github.com/thrisp/login"
 )
-
-type TestDataStore struct {
-	users map[string]User
-}
-
-func NewTestDataStore() *TestDataStore {
-	return &TestDataStore{
-		users: make(map[string]User),
-	}
-}
-
-func (t *TestDataStore) Get(s string) User {
-	return t.GetLoginUser(s).(User)
-}
-
-func (t *TestDataStore) GetLoginUser(s string) login.User {
-	return t.users[s]
-}
-
-func (t *TestDataStore) Put(User) (User, error) {
-	return nil, nil
-}
-
-func (t *TestDataStore) Delete(User) error {
-	return nil
-}
-
-func (t *TestDataStore) CreateRole(...string) {}
-
-func (t *TestDataStore) GetRole(string) Role {
-	return nil
-}
 
 func TestSecurity(t *testing.T) {
 	a := flotilla.New("securityTest")
-	m := New(WithDataStore(NewTestDataStore()))
+	m := New()
 	m.Init(a)
 	a.Configure()
 	fmt.Printf("%+v\n%+v\n", a.Env, m)

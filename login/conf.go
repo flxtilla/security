@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/thrisp/flotilla"
+	"github.com/thrisp/security/user"
 )
 
 type (
@@ -18,7 +19,7 @@ func (l *Manager) Configuration(conf ...Configuration) error {
 	return err
 }
 
-func UserLoader(fn func(string) User) Configuration {
+func UserLoader(fn func(string) user.User) Configuration {
 	return func(l *Manager) error {
 		l.userloader = fn
 		return nil

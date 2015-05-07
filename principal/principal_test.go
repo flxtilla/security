@@ -10,17 +10,17 @@ import (
 )
 
 var (
-	n1 string      = "role:a"
-	n2 string      = "role:b"
-	n3 string      = "role:c"
-	n4 string      = "item:key:gold"
-	e1 string      = "garlic"
-	e2 string      = "onion"
-	p0 *Permission = NewPermission(1, 2, 3, "four", "anonymous")
-	p1 *Permission = NewPermission(n1, n2)
-	p2 *Permission = NewPermission(n3)
-	p3 *Permission = NewPermission("role:a", n4)
-	p4 *Permission = NewPermission()
+	n1 string     = "role:a"
+	n2 string     = "role:b"
+	n3 string     = "role:c"
+	n4 string     = "item:key:gold"
+	e1 string     = "garlic"
+	e2 string     = "onion"
+	p0 Permission = NewPermission("p0", 1, 2, 3, "four", "anonymous")
+	p1 Permission = NewPermission("p1", n1, n2)
+	p2 Permission = NewPermission("p2", n3)
+	p3 Permission = NewPermission("p3", "role:a", n4)
+	p4 Permission = NewPermission("p4")
 )
 
 func PerformRequest(r http.Handler, method, path string) *httptest.ResponseRecorder {
@@ -44,7 +44,7 @@ func testextension(version string) *Manager {
 	}
 }
 
-func testidentity(p ...interface{}) *Identity {
+func testidentity(p ...interface{}) Identity {
 	return NewIdentity("test", p...)
 }
 
@@ -79,7 +79,7 @@ func TestIdentity(t *testing.T) {
 	}
 }
 
-func testallow(t *testing.T, test string, i *Identity, expected bool, permissions ...*Permission) {
+func testallow(t *testing.T, test string, i Identity, expected bool, permissions ...Permission) {
 	for _, permission := range permissions {
 		result := permission.Allows(i)
 		if result != expected {
@@ -88,7 +88,7 @@ func testallow(t *testing.T, test string, i *Identity, expected bool, permission
 	}
 }
 
-func testrequire(t *testing.T, test string, i *Identity, expected bool, permissions ...*Permission) {
+func testrequire(t *testing.T, test string, i Identity, expected bool, permissions ...Permission) {
 	for _, permission := range permissions {
 		result := permission.Requires(i)
 		if result != expected {
@@ -97,7 +97,7 @@ func testrequire(t *testing.T, test string, i *Identity, expected bool, permissi
 	}
 }
 
-func needhandler(t *testing.T, test string, kind string, i *Identity, expected bool, permissions ...*Permission) flotilla.Manage {
+func needhandler(t *testing.T, test string, kind string, i Identity, expected bool, permissions ...Permission) flotilla.Manage {
 	return func(c flotilla.Ctx) {
 		p := manager(c)
 		p.Change(i)
