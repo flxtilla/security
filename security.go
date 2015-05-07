@@ -1,7 +1,7 @@
 package security
 
 import (
-	"strings"
+	"fmt"
 
 	"github.com/thrisp/flotilla"
 	"github.com/thrisp/login"
@@ -10,41 +10,94 @@ import (
 
 var (
 	defaultsettings map[string]string = map[string]string{
-		"confirmable":  "f",
-		"registerable": "f",
-		"recoverable":  "f",
-		"trackable":    "f",
-		"passwordable": "t",
-		"changeable":   "f",
+		"BLUEPRINT_PREFIX":           "",
+		"FLASH_MESSAGES":             "t",
+		"LOGIN_URL":                  "/login",
+		"LOGOUT_URL":                 "/logout",
+		"REGISTER_URL":               "/register",
+		"RESET_URL":                  "/reset",
+		"CHANGE_URL":                 "/change",
+		"CONFIRM_URL":                "/confirm",
+		"FORGOT_PASSWORD_TEMPLATE":   "security/forgot_password.html",
+		"LOGIN_USER_TEMPLATE":        "security/login_user.html",
+		"REGISTER_USER_TEMPLATE":     "security/register_user.html",
+		"RESET_PASSWORD_TEMPLATE":    "security/reset_password.html",
+		"CHANGE_PASSWORD_TEMPLATE":   "security/change_password.html",
+		"SEND_CONFIRMATION_TEMPLATE": "security/send_confirmation.html",
+		"SEND_LOGIN_TEMPLATE":        "security/send_login.html",
+		"CONFIRMABLE":                "f",
+		"REGISTERABLE":               "f",
+		"RECOVERABLE":                "f",
+		"TRACKABLE":                  "f",
+		"PASSWORDLESS":               "f",
+		"CHANGEABLE":                 "f",
+		"CONFIRM_SALT":               "confirm-salt",
+		"RESET_SALT":                 "reset-salt",
+		"LOGIN_SALT":                 "login-salt",
+		"CHANGE_SALT":                "change-salt",
 	}
-	msg             [2]string
+
 	defaultmessages map[string]msg = map[string]msg{
-		"unauthorized": []string{"You do not have permission to view this resource.", "error"},
+		"unauthorized": Msg("You do not have permission to view this resource.", "error"),
 	}
-	Form         string
-	defaultforms map[string]Form
 )
 
 type Manager struct {
-	app       *flotilla.App
-	login     *login.Manager
-	principal *principal.Manager
+	DataStore
+	App         *flotilla.App
+	login       *login.Manager
+	principal   *principal.Manager
+	signatories map[string]TimeSignatory
+	Settings    map[string]string
 }
 
-func securityctxfuncs(m *Manager) map[string]interface{}
+//var securityfxtension map[string]interface{}
 
-func New(c ...Configuration) *Manager {}
+//var SecurityFxtension = flotilla.MakeFxtension("fxsecurity", securityfxtension)
 
-func (m *Manager) Init(app *flotilla.App)
-
-func (m *Manager) Setting(key string) string {
-	if item, ok := m.App.Env.Store[storekey(key)]; ok {
-		return item.Value
+func New(c ...Configuration) *Manager {
+	s := &Manager{
+		Settings: defaultsettings,
 	}
-	if item, ok := m.Settings[strings.ToUpper(key)]; ok {
-		return item
+
+	err := s.Configuration(c...)
+	if err != nil {
+		panic(fmt.Sprintf("[FLOTILLA-SECURITY] configuration error: %s", err))
 	}
-	return ""
+
+	if s.DataStore == nil {
+		s.DataStore = &DefaultDataStore{}
+	}
+
+	return s
 }
 
-type State struct{}
+func (m *Manager) loginmanager(a *flotilla.App) *login.Manager {
+	l := login.New(login.UserLoader(getLoginUserFunc(m.DataStore)))
+	l.Init(a)
+	return l
+}
+
+func (m *Manager) principalmanager(a *flotilla.App) *principal.Manager {
+	p := principal.New()
+	p.Init(a)
+	return p
+}
+
+func getSignatory(a *flotilla.App, name string) TimeSignatory {
+	//	secret_key = app.config.get('SECRET_KEY')
+	//	salt = app.config.get('SECURITY_%s_SALT' % name.upper())
+	//	return URLSafeTimedSerializer(secret_key=secret_key, salt=salt)
+	return nil
+}
+
+func (m *Manager) Init(a *flotilla.App) {
+	m.App = a
+	m.login = m.loginmanager(m.App)
+	m.principal = m.principalmanager(m.App)
+
+	//a.AddFxtensions(SecurityFxtension)
+
+	bp := makeBlueprint(m)
+	a.Mount("/", bp)
+}
