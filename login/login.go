@@ -14,6 +14,7 @@ type (
 	handlers map[string]flotilla.Manage
 
 	Manager struct {
+		user.DataStore
 		s          session.SessionStore
 		userloader func(string) user.User
 		App        *flotilla.App
@@ -34,13 +35,21 @@ var (
 )
 
 func New(c ...Configuration) *Manager {
-	m := &Manager{Settings: defaultsettings,
-		Handlers: make(handlers)}
+	m := &Manager{
+		Settings: defaultsettings,
+		Handlers: make(handlers),
+	}
 	c = append(c, Handler("cookie", m.GetRemembered))
 	err := m.Configuration(c...)
 	if err != nil {
 		panic(fmt.Sprintf("[FLOTILLA-LOGIN] configuration error: %s", err))
 	}
+	if m.DataStore == nil {
+		m.DataStore = user.DefaultDataStore()
+	}
+
+	m.userloader = m.Get
+
 	return m
 }
 

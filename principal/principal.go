@@ -7,6 +7,7 @@ import (
 )
 
 type Manager struct {
+	DataStore
 	ctx          flotilla.Ctx
 	loaders      []IdentityLoader
 	handlers     []IdentityHandler
@@ -17,6 +18,9 @@ func New(c ...Conf) *Manager {
 	p := &Manager{}
 	c = append(c, IdentityHandle(defaulthandler))
 	p.Configure(c...)
+	if p.DataStore == nil {
+		p.DataStore = DefaultDataStore()
+	}
 	return p
 }
 

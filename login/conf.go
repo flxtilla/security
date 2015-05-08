@@ -19,6 +19,13 @@ func (l *Manager) Configuration(conf ...Configuration) error {
 	return err
 }
 
+func WithDataStore(d user.DataStore) Configuration {
+	return func(l *Manager) error {
+		l.DataStore = d
+		return nil
+	}
+}
+
 func UserLoader(fn func(string) user.User) Configuration {
 	return func(l *Manager) error {
 		l.userloader = fn

@@ -1,6 +1,11 @@
 package security
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/thrisp/security/principal"
+	"github.com/thrisp/security/user"
+)
 
 type Configuration func(*Manager) error
 
@@ -12,9 +17,16 @@ func (m *Manager) Configuration(conf ...Configuration) error {
 	return err
 }
 
-func WithDataStore(d DataStore) Configuration {
+func UserDataStore(u user.DataStore) Configuration {
 	return func(s *Manager) error {
-		s.DataStore = d
+		s.login.DataStore = u
+		return nil
+	}
+}
+
+func PrincipalDataStore(p principal.DataStore) Configuration {
+	return func(s *Manager) error {
+		s.principal.DataStore = p
 		return nil
 	}
 }
