@@ -3,6 +3,7 @@ package user
 import "errors"
 
 type DataStore interface {
+	New(string, string) (User, error)
 	Get(string) User
 	Put(User) (User, error)
 	Delete(User) error
@@ -15,6 +16,10 @@ func DefaultDataStore() *defaultDataStore {
 }
 
 type defaultDataStore struct{}
+
+func (d *defaultDataStore) New(name string, password string) (User, error) {
+	return AnonymousUser, NotImplemented
+}
 
 func (d *defaultDataStore) Get(string) User {
 	return AnonymousUser

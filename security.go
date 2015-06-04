@@ -3,96 +3,70 @@ package security
 import (
 	"crypto/md5"
 	"fmt"
+	"hash"
 
 	"github.com/thrisp/flotilla"
 
+	"github.com/thrisp/fork"
 	"github.com/thrisp/security/login"
 	"github.com/thrisp/security/principal"
+	"github.com/thrisp/security/resources"
+	"github.com/thrisp/security/user"
 )
 
-var defaultsettings map[string]string = map[string]string{
-	"BLUEPRINT_PREFIX":           "",
-	"FLASH_MESSAGES":             "t",
-	"LOGIN_URL":                  "/login",
-	"LOGOUT_URL":                 "/logout",
-	"REGISTER_URL":               "/register",
-	"RESET_URL":                  "/reset",
-	"CHANGE_URL":                 "/change",
-	"CONFIRM_URL":                "/confirm",
-	"FORGOT_PASSWORD_TEMPLATE":   "security/forgot_password.html",
-	"LOGIN_USER_TEMPLATE":        "security/login_user.html",
-	"REGISTER_USER_TEMPLATE":     "security/register_user.html",
-	"RESET_PASSWORD_TEMPLATE":    "security/reset_password.html",
-	"CHANGE_PASSWORD_TEMPLATE":   "security/change_password.html",
-	"SEND_CONFIRMATION_TEMPLATE": "security/send_confirmation.html",
-	"SEND_LOGIN_TEMPLATE":        "security/send_login.html",
-	"CONFIRMABLE":                "f",
-	"REGISTERABLE":               "f",
-	"RECOVERABLE":                "f",
-	"TRACKABLE":                  "f",
-	"PASSWORDLESS":               "f",
-	"CHANGEABLE":                 "f",
-	"CONFIRM_SALT":               "confirm-salt",
-	"RESET_SALT":                 "reset-salt",
-	"LOGIN_SALT":                 "login-salt",
-	"CHANGE_SALT":                "change-salt",
-}
-
-var defaultmessages map[string]msg = map[string]msg{
-	"unauthorized":                  Msg("You do not have permission to view this resource.", "error"),
-	"confirm_registration":          Msg("Thank you. Confirmation instructions have been sent to %(email)s.", "success"),
-	"email_confirmed":               Msg("Thank you. Your email has been confirmed.", "success"),
-	"already_confirmed":             Msg("Your email has already been confirmed.", "info"),
-	"invalid_confirmation_token":    Msg("Invalid confirmation token.", "error"),
-	"email_already_associated":      Msg("%(email)s is already associated with an account.", "error"),
-	"password_mismatch":             Msg("Password does not match", "error"),
-	"retype_password_mismatch":      Msg("Passwords do not match", "error"),
-	"invalid_redirect":              Msg("Redirections outside the domain are forbidden", "error"),
-	"password_reset_request":        Msg("Instructions to reset your password have been sent to %(email)s.", "info"),
-	"password_reset_expired":        Msg("You did not reset your password within %(within)s. New instructions have been sent to %(email)s.", "error"),
-	"invalid_reset_password_token":  Msg("Invalid reset password token.", "error"),
-	"confirmation_required":         Msg("Email requires confirmation.", "error"),
-	"confirmation_request":          Msg("Confirmation instructions have been sent to %(email)s.", "info"),
-	"confirmation_expired":          Msg("You did not confirm your email within %(within)s. New instructions to confirm your email have been sent to %(email)s.", "error"),
-	"login_expired":                 Msg("You did not login within %(within)s. New instructions to login have been sent to %(email)s.", "error"),
-	"login_email_sent":              Msg("Instructions to login have been sent to %(email)s.", "success"),
-	"invalid_login_token":           Msg("Invalid login token.", "error"),
-	"disabled_account":              Msg("Account is disabled.", "error"),
-	"email_not_provided":            Msg("Email not provided", "error"),
-	"invalid_email_address":         Msg("Invalid email address", "error"),
-	"password_not_provided":         Msg("Password not provided", "error"),
-	"password_not_set":              Msg("No password is set for this user", "error"),
-	"password_invalid_length":       Msg("Password must be at least 6 characters", "error"),
-	"user_does_not_exist":           Msg("Specified user does not exist", "error"),
-	"invalid_password":              Msg("Invalid password", "error"),
-	"passwordless_login_successful": Msg("You have successfuly logged in.", "success"),
-	"password_reset":                Msg("You successfully reset your password and you have been logged in automatically.", "success"),
-	"password_is_the_same":          Msg("Your new password must be different than your previous password.", "error"),
-	"password_change":               Msg("You successfully changed your password.", "success"),
-	"login":                         Msg("Please log in to access this page.", "info"),
-	"refresh":                       Msg("Please reauthenticate to access this page.", "info"),
-}
-
 type Manager struct {
-	App         *flotilla.App
-	login       *login.Manager
-	principal   *principal.Manager
-	signatories map[string]TimeSignatory
-	Settings    map[string]string
+	user.DataStore
+	App       *flotilla.App
+	login     *login.Manager
+	principal *principal.Manager
+	hshfnc    func() hash.Hash
+	xsrf      fork.Field
+	Signatories
+	Emailer
+	Forms
+	Settings
+	Messages
 }
 
-//var securityfxtension map[string]interface{}
+func (s *Manager) contextualize(c flotilla.Ctx) *Manager {
+	s.login.Reload(c)
+	return s
+}
 
-//var SecurityFxtension = flotilla.MakeFxtension("fxsecurity", securityfxtension)
+func manager(c flotilla.Ctx) *Manager {
+	s, _ := c.Call("security")
+	return s.(*Manager)
+}
+
+func mkextension(s *Manager) map[string]interface{} {
+	return map[string]interface{}{
+		"security": s.contextualize,
+	}
+}
+
+func (s *Manager) mkfxtension() flotilla.Fxtension {
+	return flotilla.MakeFxtension("fxsecurity", mkextension(s))
+}
 
 func New(c ...Configuration) *Manager {
 	s := &Manager{
 		login:     login.New(),
 		principal: principal.New(),
-		Settings:  defaultsettings,
+		Settings:  defaultSettings,
+		Messages:  defaultMessages,
 	}
 
+	s.Forms = defaultForms(s)
+
 	err := s.Configuration(c...)
+
+	if s.DataStore == nil {
+		s.DataStore = user.DefaultDataStore()
+	}
+
+	s.login.Configure(login.UserLoader(s.Get))
+	s.principal.Configure(principal.UseSession())
+
 	if err != nil {
 		panic(fmt.Sprintf("[FLOTILLA-SECURITY] configuration error: %s", err))
 	}
@@ -100,26 +74,66 @@ func New(c ...Configuration) *Manager {
 	return s
 }
 
-func configureSigning(m *Manager, a *flotilla.App) {
-	//ss := make(map[string]TimeSignatory)
-	//var sigs = []string{"confirm","reset","login","change","token"}
+func configureApp(s *Manager, a *flotilla.App) {
+	s.App = a
+	a.AddFxtensions(s.mkfxtension())
+	a.Env.Assets = append(a.Env.Assets, resources.SecurityAsset)
+	a.AddCtxProcessors(templateMacros(s.Forms))
+	a.Mount("/", makeBlueprint(s))
 }
 
-func (m *Manager) getSignatory(a *flotilla.App, name string) TimeSignatory {
-	secretkey := m.Setting("secret_key")
-	salt := m.Setting(fmt.Sprintf("security_%s_salt", name))
-	return NewTimeSignatory(secretkey, salt, md5.New) //config option for hash
+func (s *Manager) configureUnset() {
+	if s.hshfnc == nil {
+		s.hshfnc = md5.New
+	}
+	if s.Emailer == nil {
+		s.Emailer = DefaultEmailer(s, defaultemailtemplates)
+	}
+	if s.BoolSetting("form_xsrf") && s.xsrf == nil {
+		s.xsrf = fork.XSRF("x", s.Setting("xsrf-salt"))
+	}
 }
 
-func (m *Manager) Init(a *flotilla.App) {
-	m.App = a
-	m.login.Init(m.App)
-	m.principal.Init(m.App)
+func (s *Manager) Init(a *flotilla.App) {
+	configureApp(s, a)
 
-	//a.AddFxtensions(SecurityFxtension)
+	s.login.Init(s.App)
+	s.principal.Init(s.App)
 
-	configureSigning(m, a)
+	s.configureUnset()
 
-	bp := makeBlueprint(m)
-	a.Mount("/", bp)
+	s.configureSignatories(s.App)
+}
+
+func (s *Manager) Flash(f flotilla.Ctx, messages ...string) {
+	if s.BoolSetting("flash_messages") {
+		category, message := s.fmtMessage(messages...)
+		f.Call("flash", category, message)
+	}
+}
+
+func (s *Manager) LoginUser(u user.User, remember bool, f flotilla.Ctx) {
+	s.login.LoginUser(u, remember, true)
+	s.principal.Change(u)
+}
+
+func (s *Manager) LogoutUser() {
+	s.login.LogoutUser()
+	s.principal.Change(user.AnonymousUser)
+}
+
+func (s *Manager) CurrentUser() user.User {
+	return s.login.CurrentUser()
+}
+
+func (s *Manager) ExternalUrl(f flotilla.Ctx, route string, params ...string) string {
+	url, _ := f.Call("urlfor", route, true, params)
+	return url.(string)
+}
+
+func (s *Manager) ManagerLogin() string {
+	if s.BoolSetting("passwordless") {
+		return "PASSWORDLESS_URL"
+	}
+	return "LOGIN_URL"
 }

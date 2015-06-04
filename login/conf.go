@@ -11,19 +11,12 @@ type (
 	Configuration func(*Manager) error
 )
 
-func (l *Manager) Configuration(conf ...Configuration) error {
+func (l *Manager) Configure(conf ...Configuration) error {
 	var err error
 	for _, c := range conf {
 		err = c(l)
 	}
 	return err
-}
-
-func WithDataStore(d user.DataStore) Configuration {
-	return func(l *Manager) error {
-		l.DataStore = d
-		return nil
-	}
 }
 
 func UserLoader(fn func(string) user.User) Configuration {
@@ -32,6 +25,13 @@ func UserLoader(fn func(string) user.User) Configuration {
 		return nil
 	}
 }
+
+//func TokenLoader(fn func(string) user.User) Configuration {
+//	return func(l *Manager) error {
+//		l.tokenloader = fn
+//		return nil
+//	}
+//}
 
 func Handler(name string, h flotilla.Manage) Configuration {
 	return func(l *Manager) error {

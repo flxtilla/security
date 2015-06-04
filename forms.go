@@ -1,129 +1,121 @@
 package security
 
 import (
-	"errors"
 	"fmt"
-	"net/http"
-	"strings"
+	"html/template"
 
+	"github.com/thrisp/flotilla"
 	"github.com/thrisp/fork"
 )
 
-var defaultForms = map[string]SecurityForm{
-	"login_form":              loginForm,
-	"passwordless_login_form": passwordlessForm,
-	"confirm_register_form":   confirmRegisterForm,
-	"register_form":           registerForm,
-	"forgot_password_form":    forgotPasswordForm,
-	"reset_password_form":     resetPasswordForm,
-	"change_password_form":    changePasswordForm,
-	"send_confirmation_form":  sendConfirmationForm,
+type Forms map[string]Form
+
+func (s Forms) byKey(key string) Form {
+	return s[fmt.Sprintf("%s_form", key)]
 }
 
-type SecurityForm interface {
-	fork.Form
+func defaultForms(s *Manager) Forms {
+	return Forms{
+		"login_form":              LoginForm(s),
+		"passwordless_login_form": PasswordlessForm(s),
+		"send_reset_form":         SendResetForm(s),
+		"reset_password_form":     ResetPasswordForm(s),
+		"change_password_form":    ChangePasswordForm(s),
+		"register_form":           RegisterForm(s),
+		"send_confirm_form":       SendConfirmForm(s),
+		"confirm_user_form":       ConfirmUserForm(s),
+	}
 }
 
-func NewSecurityForm(fields ...fork.Field) SecurityForm {
-	return fork.NewForm(fields...)
-}
-
-func confirmablepasswordwidget(options ...string) fork.Widget {
-	return fork.NewWidget(fmt.Sprintf(`<fieldset><div class="password-input"><input type="password" name="{{ .Name }}" %s></div><div class="password-input"><input type="password" name="{{ .Name }}-confirm" %s></div></fieldset>`, strings.Join(options, " ")))
-}
-
-func ValidPasswords(t *cPassword) error {
-	if t.validateable {
-		if t.p1 != t.p2 {
-			return errors.New("Provided passwords do not match")
+func templateMacro(f Form) func(flotilla.Ctx) template.HTML {
+	return func(c flotilla.Ctx) template.HTML {
+		prev, _ := c.Call("get", f.Tag())
+		if prev != nil {
+			return prev.(Form).Render()
 		}
-	}
-	return nil
-}
-
-func ConfirmablePassword(name string, options ...string) fork.Field {
-	return &cPassword{
-		name: name,
-		Processor: fork.NewProcessor(
-			confirmablepasswordwidget(options...),
-			[]interface{}{
-				ValidPasswords,
-			},
-			nil,
-		),
+		return f.Fresh().Render()
 	}
 }
 
-type cPassword struct {
-	name         string
-	p1           string
-	p2           string
-	validateable bool
-	fork.Processor
-}
-
-func (t *cPassword) New() fork.Field {
-	var newfield cPassword = *t
-	t.p1, t.p2 = "", ""
-	t.validateable = false
-	return &newfield
-}
-
-func (t *cPassword) Name(name ...string) string {
-	if len(name) > 0 {
-		t.name = strings.Join(name, "-")
+func templateMacros(forms map[string]Form) map[string]interface{} {
+	ret := make(map[string]interface{})
+	for k, v := range forms {
+		ret[k] = templateMacro(v)
 	}
-	return t.name
+	return ret
 }
 
-func (t *cPassword) Get() *fork.Value {
-	return fork.NewValue([]string{t.p1, t.p2})
+func LoginForm(s *Manager) Form {
+	return s.NewForm(
+		"login",
+		CheckUserPassword,
+		UserName(s, "user-name"),
+		PassWord("user-pass", `placeholder="password"`),
+		fork.BooleanField("rememberme", "Remember Me", false),
+	)
 }
 
-func (t *cPassword) Set(r *http.Request) {
-	v1 := t.Filter(t.Name(), r)
-	v2 := t.Filter(fmt.Sprintf("%s-confirm", t.Name()), r)
-	t.p1 = v1.String()
-	t.p2 = v2.String()
-	t.validateable = true
+func PasswordlessForm(s *Manager) Form {
+	return s.NewForm(
+		"passwordless",
+		CheckForm,
+		UserName(s, "user-name"),
+		fork.BooleanField("rememberme", "Remember Me", false),
+	)
 }
 
-func (t *cPassword) Validateable() bool {
-	return t.validateable
+func SendResetForm(s *Manager) Form {
+	return s.NewForm(
+		"send_reset",
+		CheckForm,
+		UserName(s, "user-name"),
+	)
 }
 
-var loginForm fork.Form = NewSecurityForm(
-	fork.EmailField("email", nil, nil),
-	fork.PassWordField("password", nil, nil),
-	fork.BooleanField("rememberme", "Remember Me", false),
-)
+func ResetPasswordForm(s *Manager) Form {
+	return s.NewForm(
+		"reset",
+		CheckPasswords,
+		UserName(s, "user-name"),
+		confirmOne,
+		confirmTwo,
+		LeasedToken(s, "token:reset"),
+	)
+}
 
-var passwordlessForm = NewSecurityForm(
-	fork.EmailField("email", nil, nil),
-)
+func ChangePasswordForm(s *Manager) Form {
+	return s.NewForm(
+		"change",
+		CheckPasswords,
+		confirmOne,
+		confirmTwo,
+	)
+}
 
-var registerForm = NewSecurityForm(
-	fork.EmailField("email", nil, nil),
-	ConfirmablePassword("register"),
-)
+func RegisterForm(s *Manager) Form {
+	return s.NewForm(
+		"register",
+		CheckPasswords,
+		UserName(s, "user-name"),
+		confirmOne,
+		confirmTwo,
+	)
+}
 
-var confirmRegisterForm = NewSecurityForm(
-	fork.EmailField("email", nil, nil),
-	ConfirmablePassword("confirm-register"),
-)
+func SendConfirmForm(s *Manager) Form {
+	return s.NewForm(
+		"send_confirm",
+		CheckForm,
+		UserName(s, "user-name"),
+	)
+}
 
-var forgotPasswordForm = NewSecurityForm(
-	fork.EmailField("email", nil, nil),
-)
-
-var resetPasswordForm = NewSecurityForm(
-	ConfirmablePassword("reset"),
-)
-
-var changePasswordForm = NewSecurityForm(
-	ConfirmablePassword("change"),
-)
-
-var sendConfirmationForm = NewSecurityForm(
-	fork.EmailField("email", nil, nil),
-)
+func ConfirmUserForm(s *Manager) Form {
+	return s.NewForm(
+		"confirm_user",
+		CheckPasswords,
+		UserName(s, "user-name"),
+		confirmOne,
+		confirmTwo,
+	)
+}

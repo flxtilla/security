@@ -13,7 +13,15 @@ import (
 type Tuser struct {
 	principal.Identity
 	username string
+	password string
 	active   bool
+}
+
+func (u *Tuser) Authenticate(s string) bool {
+	if s == u.password {
+		return true
+	}
+	return false
 }
 
 func (u *Tuser) Authenticated() bool {
@@ -116,7 +124,18 @@ func TestLogin(t *testing.T) {
 		}
 		c.Call("serveplain", 200, []byte("success"))
 	})
+	f.GET("/afterlogin", func(c flotilla.Ctx) {
+		//l, _ := c.Call("loginmanager")
+		//m := l.(*Manager)
+		//cu1 := m.CurrentUser()
+		//cu2, _ := c.Call("currentuser")
+		//curr := fmt.Sprintf("*****\n%+v\n%+v\n", cu1, cu2)
+		//fmt.Printf(curr)
+		//s, _ := c.Call("session")
+		//fmt.Printf(fmt.Sprintf("%+v\n", s))
+	})
 	PerformRequest(f, "POST", "/login")
+	PerformRequest(f, "GET", "/afterlogin")
 	if !loggedin {
 		t.Errorf("login did not occur")
 	}

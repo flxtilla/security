@@ -1,10 +1,6 @@
 package principal
 
-import (
-	"reflect"
-
-	"github.com/thrisp/flotilla"
-)
+import "github.com/thrisp/flotilla"
 
 type Manager struct {
 	DataStore
@@ -24,63 +20,49 @@ func New(c ...Conf) *Manager {
 	return p
 }
 
-func (m *Manager) Init(app *flotilla.App) {
-	app.Configuration = append(app.Configuration, flotilla.Extensions(PrincipalFxtension(m)))
-	app.UseAt(0, m.OnRequest)
+func (p *Manager) Init(app *flotilla.App) {
+	app.Configuration = append(app.Configuration, flotilla.Extensions(p.mkfxtension()))
+	app.UseAt(0, p.OnRequest)
 }
 
-type principalfxtension struct {
-	fns map[string]reflect.Value
-}
-
-func (fx *principalfxtension) add(name string, fn interface{}) {
-	fx.fns[name] = reflect.ValueOf(fn)
-}
-
-func PrincipalFxtension(m *Manager) flotilla.Fxtension {
-	pf := &principalfxtension{fns: make(map[string]reflect.Value)}
-	pf.add("principal", func(c flotilla.Ctx) *Manager { return m })
-	pf.add("currentidentity", func(c flotilla.Ctx) Identity { return currentidentity(c) })
-	return pf
-}
-
-func (p *principalfxtension) Name() string {
-	return "fxprincipal"
-}
-
-func (p *principalfxtension) Set(rv map[string]reflect.Value) {
-	for k, v := range p.fns {
-		rv[k] = v
+func mkextension(p *Manager) map[string]interface{} {
+	return map[string]interface{}{
+		"principal":       func(c flotilla.Ctx) *Manager { return p },
+		"currentidentity": func(c flotilla.Ctx) Identity { return currentidentity(c) },
 	}
 }
 
-func (m *Manager) Change(i Identity) {
-	m.Handle(i)
+func (p *Manager) mkfxtension() flotilla.Fxtension {
+	return flotilla.MakeFxtension("fxprincipal", mkextension(p))
 }
 
-func (m *Manager) LoadIdentity(c flotilla.Ctx) Identity {
+func (p *Manager) Change(i Identity) {
+	p.Handle(i)
+}
+
+func (p *Manager) LoadIdentity(c flotilla.Ctx) Identity {
 	identity := Anonymous
-	for _, loader := range m.loaders {
+	for _, loader := range p.loaders {
 		identity = loader(c)
 	}
-	m.Handle(identity)
+	p.Handle(identity)
 	return identity
 }
 
-func (m *Manager) Handle(i Identity) {
-	for _, h := range m.handlers {
-		h(i, m.ctx)
+func (p *Manager) Handle(i Identity) {
+	for _, h := range p.handlers {
+		h(i, p.ctx)
 	}
 }
 
-func (m *Manager) OnRequest(c flotilla.Ctx) {
-	m.ctx = c
-	m.LoadIdentity(c)
+func (p *Manager) OnRequest(c flotilla.Ctx) {
+	p.ctx = c
+	p.LoadIdentity(c)
 }
 
-func (m *Manager) Unauthorized(c flotilla.Ctx) {
-	if m.unauthorized != nil {
-		m.unauthorized(c)
+func (p *Manager) Unauthorized(c flotilla.Ctx) {
+	if p.unauthorized != nil {
+		p.unauthorized(c)
 	} else {
 		c.Call("status", 401)
 	}

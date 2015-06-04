@@ -5,8 +5,11 @@ import (
 	"crypto/hmac"
 	"crypto/subtle"
 	"encoding/base64"
+	"fmt"
 	"hash"
 	"time"
+
+	"github.com/thrisp/flotilla"
 )
 
 const (
@@ -35,7 +38,7 @@ func NewBase64Signer(h hash.Hash) *Base64Signer {
 	}
 }
 
-func (s *Base64Signer) base64Encode(b []byte) []byte {
+func base64Encode(b []byte) []byte {
 	dst := make([]byte, base64.URLEncoding.EncodedLen(len(b)))
 	base64.URLEncoding.Encode(dst, b)
 	for i := len(dst) - 1; i > 0; i-- {
@@ -46,7 +49,7 @@ func (s *Base64Signer) base64Encode(b []byte) []byte {
 	return dst
 }
 
-func (s *Base64Signer) base64Decode(b []byte) ([]byte, error) {
+func base64Decode(b []byte) ([]byte, error) {
 	for i := 0; i < len(b)%4; i++ {
 		b = append(b, '=')
 	}
@@ -62,7 +65,7 @@ func (s *Base64Signer) base64Decode(b []byte) ([]byte, error) {
 func (s *Base64Signer) signature(b []byte) []byte {
 	s.h.Reset()
 	s.h.Write(b)
-	return s.base64Encode(s.h.Sum(nil))
+	return base64Encode(s.h.Sum(nil))
 }
 
 func (s *Base64Signer) Sign(msg []byte) []byte {
@@ -102,11 +105,11 @@ func (s *Base64TimeSigner) encodeTime(unixTime int64) []byte {
 		unixTime >>= i * 8
 		b = append(b, byte(unixTime))
 	}
-	return s.base64Encode(b)
+	return base64Encode(b)
 }
 
 func (s *Base64TimeSigner) decodeTime(b []byte) int64 {
-	b, err := s.base64Decode(b)
+	b, err := base64Decode(b)
 	if err != nil {
 		return 0
 	}
@@ -154,6 +157,20 @@ func splitRight(b []byte, sep []byte) [][]byte {
 	return [][]byte{b[:ind], b[ind+1:]}
 }
 
+//func Token(b []byte) *token {
+//	return &token{
+//		b: b,
+//		s: string(b),
+//	}
+//}
+
+//type token struct {
+//	b []byte
+//	s string
+//}
+
+type Signatories map[string]TimeSignatory
+
 type TimeSignatory interface {
 	TimeSigner
 }
@@ -181,4 +198,26 @@ func NewTimeSignatory(key string, salt string, hasher func() hash.Hash) TimeSign
 	h := hmac.New(ts.hasher, ts.secret())
 	ts.Base64TimeSigner = NewBase64TimeSigner(h)
 	return ts
+}
+
+func (s *Manager) configureSignatories(a *flotilla.App) {
+	ss := make(map[string]TimeSignatory)
+	var sigs = []string{"default", "passwordless", "send_confirm", "send_reset"}
+	for _, sig := range sigs {
+		ss[sig] = s.configureSignatory(a, sig)
+	}
+	s.Signatories = ss
+}
+
+func (s *Manager) configureSignatory(a *flotilla.App, name string) TimeSignatory {
+	secretkey := s.Setting("secret_key")
+	salt := s.Setting(fmt.Sprintf("security_%s_salt", name))
+	return NewTimeSignatory(secretkey, salt, s.hshfnc)
+}
+
+func (s *Manager) Signatory(key string) TimeSignatory {
+	if sig, ok := s.Signatories[key]; ok {
+		return sig
+	}
+	return s.Signatories["default"]
 }

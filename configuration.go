@@ -1,6 +1,7 @@
 package security
 
 import (
+	"hash"
 	"strings"
 
 	"github.com/thrisp/security/principal"
@@ -19,7 +20,7 @@ func (m *Manager) Configuration(conf ...Configuration) error {
 
 func UserDataStore(u user.DataStore) Configuration {
 	return func(s *Manager) error {
-		s.login.DataStore = u
+		s.DataStore = u
 		return nil
 	}
 }
@@ -31,13 +32,20 @@ func PrincipalDataStore(p principal.DataStore) Configuration {
 	}
 }
 
-func Settings(items ...string) Configuration {
+func Setting(items ...string) Configuration {
 	return func(s *Manager) error {
 		for _, item := range items {
 			i := strings.Split(item, ":")
 			key, value := i[0], i[1]
 			s.Settings[strings.ToUpper(key)] = value
 		}
+		return nil
+	}
+}
+
+func HashFunction(fn func() hash.Hash) Configuration {
+	return func(s *Manager) error {
+		s.hshfnc = fn
 		return nil
 	}
 }

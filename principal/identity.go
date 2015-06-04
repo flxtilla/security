@@ -1,9 +1,12 @@
 package principal
 
 import (
+	"encoding/gob"
+
 	"github.com/thrisp/flotilla"
-	"gopkg.in/fatih/set.v0"
 )
+
+//"gopkg.in/fatih/set.v0"
 
 type IdentityLoader func(flotilla.Ctx) Identity
 
@@ -30,28 +33,28 @@ var Anonymous = NewIdentity("anonymous", "anonymous")
 
 type Identity interface {
 	Tag() string
-	Provides(...interface{}) *set.Set
+	Provides(...interface{}) Set
 	Can(Permission) bool
 	Must(Permission) bool
 }
 
 type identity struct {
-	tag      string
-	provides *set.Set
+	Tagged   string
+	Provided Set
 }
 
-func NewIdentity(tag string, provides ...interface{}) Identity {
-	provides = append(provides, "anonymous")
-	return &identity{tag: tag, provides: set.New(provides...)}
+func NewIdentity(tag string, provided ...interface{}) Identity {
+	provided = append(provided, "anonymous")
+	return &identity{Tagged: tag, Provided: NewSet(provided...)}
 }
 
 func (i *identity) Tag() string {
-	return i.tag
+	return i.Tagged
 }
 
-func (i *identity) Provides(p ...interface{}) *set.Set {
-	i.provides.Add(p...)
-	return i.provides
+func (i *identity) Provides(p ...interface{}) Set {
+	i.Provided.Add(p...)
+	return i.Provided
 }
 
 func (i *identity) Can(p Permission) bool {
@@ -68,4 +71,9 @@ func currentidentity(c flotilla.Ctx) Identity {
 		return identity.(Identity)
 	}
 	return Anonymous
+}
+
+func init() {
+	gob.Register(&identity{})
+	gob.Register(&set{})
 }
