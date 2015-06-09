@@ -8,18 +8,21 @@ import (
 
 type Settings map[string]string
 
-var defaultSettings map[string]string = map[string]string{
+var defaultSettings Settings = Settings{
 	"BLUEPRINT_PREFIX":           "/",
 	"FLASH_MESSAGES":             "t",
 	"LOGIN_URL":                  "/login",
 	"PASSWORDLESS_URL":           "/p/login",
+	"PASSWORDLESS_TOKEN_URL":     "/p/login/:token",
 	"LOGOUT_URL":                 "/logout",
 	"REGISTER_URL":               "/register",
-	"RESET_URL":                  "/reset",
 	"SEND_RESET_URL":             "/send/reset",
+	"RESET_TOKEN_URL":            "/reset/:token",
+	"RESET_URL":                  "/reset",
 	"CHANGE_URL":                 "/change",
-	"CONFIRM_URL":                "/confirm",
 	"SEND_CONFIRM_URL":           "/send/confirm",
+	"CONFIRM_TOKEN_URL":          "/confirm/:token",
+	"CONFIRM_URL":                "/confirm",
 	"FORGOT_PASSWORD_TEMPLATE":   "forgot_password.html",
 	"LOGIN_USER_TEMPLATE":        "login_user.html",
 	"REGISTER_USER_TEMPLATE":     "register_user.html",
@@ -39,11 +42,13 @@ var defaultSettings map[string]string = map[string]string{
 	"SEND_RESET_SALT":            "reset-salt",
 	"FORM_XSRF":                  "t",
 	"XSRF-SALT":                  "xsrf-salt",
+	"FORM_LEASED":                "t",
 	"LEASED_TOKEN_SALT":          "leased-salt",
+	"LEASED_TOKEN_DURATION":      "5m",
 	"PASSWORDLESS_DURATION":      "12h",
 	"SEND_CONFIRM_DURATION":      "60h",
 	"SEND_RESET_DURATION":        "60h",
-	"LEASED_TOKEN_DURATION":      "5m",
+	"FORM_MENU":                  "t",
 }
 
 func storekey(key string) string {

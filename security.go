@@ -2,7 +2,6 @@ package security
 
 import (
 	"crypto/md5"
-	"fmt"
 	"hash"
 
 	"github.com/thrisp/flotilla"
@@ -68,7 +67,7 @@ func New(c ...Configuration) *Manager {
 	s.principal.Configure(principal.UseSession())
 
 	if err != nil {
-		panic(fmt.Sprintf("[FLOTILLA-SECURITY] configuration error: %s", err))
+		panic(ConfigurationErrorString(err))
 	}
 
 	return s

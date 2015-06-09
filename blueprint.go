@@ -33,7 +33,7 @@ func posted(f flotilla.Ctx, key string, ifvalid IfValid) {
 	s, r := manager(f), request(f)
 	form := s.Forms.byKey(key).Fresh()
 	form.Process(r)
-	_, valid := form.Check()
+	valid, _ := form.Check(form)
 	if valid {
 		ifvalid(f, s, form)
 	}
@@ -183,6 +183,7 @@ func postChangePassword(f flotilla.Ctx) {
 				s.formFail(f, form, "change.html")
 			}
 			if err == nil {
+				s.sendNotice(f, form)
 				s.redirectAfter(f, form, "password_change")
 			}
 		},
@@ -215,7 +216,7 @@ func postRegister(f flotilla.Ctx) {
 }
 
 func getSendConfirm(f flotilla.Ctx) {
-	f.Call("rendertemplate", "send_confirmation.html", nil)
+	f.Call("rendertemplate", "send_confirm.html", nil)
 }
 
 func postSendConfirm(f flotilla.Ctx) {
@@ -238,6 +239,8 @@ func postConfirmUser(f flotilla.Ctx) {
 		f,
 		"confirm_user",
 		func(f flotilla.Ctx, s *Manager, form Form) {
+			usr := formUser(form)
+			usr.Update("confirmed", "true")
 		},
 	)
 }
@@ -274,8 +277,7 @@ func makeBlueprint(s *Manager) *flotilla.Blueprint {
 		plurl := s.Setting("passwordless_url")
 		SecurityRoute(bp, "getSendLogin", "GET", plurl, AnonymousRequired(getSendLogin))
 		SecurityRoute(bp, "postSendLogin", "POST", plurl, AnonymousRequired(postSendLogin))
-		pturl := fmt.Sprintf("%s/:token", plurl)
-		SecurityRoute(bp, "getPasswordlessToken", "GET", pturl, AnonymousRequired(tokenLogin))
+		SecurityRoute(bp, "getPasswordlessToken", "GET", s.Setting("passwordless_token_url"), AnonymousRequired(tokenLogin))
 	}
 
 	if s.BoolSetting("recoverable") {
@@ -283,8 +285,7 @@ func makeBlueprint(s *Manager) *flotilla.Blueprint {
 		SecurityRoute(bp, "getSendReset", "GET", srurl, AnonymousRequired(getSendReset))
 		SecurityRoute(bp, "postSendReset", "POST", srurl, AnonymousRequired(postSendReset))
 		rurl := s.Setting("reset_url")
-		rturl := fmt.Sprintf("%s/:token", rurl)
-		SecurityRoute(bp, "getResetToken", "GET", rturl, AnonymousRequired(getResetPassword))
+		SecurityRoute(bp, "getResetToken", "GET", s.Setting("reset_token_url"), AnonymousRequired(getResetPassword))
 		SecurityRoute(bp, "postResetToken", "POST", rurl, AnonymousRequired(postResetPassword))
 	}
 
@@ -301,12 +302,11 @@ func makeBlueprint(s *Manager) *flotilla.Blueprint {
 	}
 
 	if s.BoolSetting("confirmable") {
-		curl := s.Setting("confirm_url")
+		curl := s.Setting("send_confirm_url")
 		SecurityRoute(bp, "getSendConfirmation", "GET", curl, getSendConfirm)
 		SecurityRoute(bp, "postSendConfirmation", "POST", curl, postSendConfirm)
-		turl := fmt.Sprintf("%s/:token", s.Setting("confirm_url"))
-		SecurityRoute(bp, "getConfirmToken", "GET", turl, getConfirmUser)
-		SecurityRoute(bp, "postConfirmToken", "POST", turl, postConfirmUser)
+		SecurityRoute(bp, "getConfirmToken", "GET", s.Setting("confirm_token_url"), getConfirmUser)
+		SecurityRoute(bp, "postConfirmToken", "POST", s.Setting("confirm_url"), postConfirmUser)
 	}
 
 	return bp

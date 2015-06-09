@@ -11,16 +11,33 @@ import (
 	"github.com/thrisp/security/user"
 )
 
+type securityName struct {
+	name string
+}
+
+func (s *securityName) Name() string {
+	return s.name
+}
+
+func (s *securityName) ReName(rename ...string) string {
+	if len(rename) > 0 {
+		s.name = strings.Join(rename, "-")
+	}
+	return s.name
+}
+
+func (s *securityName) Copy() *securityName {
+	var ret securityName = *s
+	return &ret
+}
+
 func UserName(s *Manager, name string, options ...string) fork.Field {
 	return &userName{
-		name: name,
+		securityName: &securityName{name},
 		Processor: fork.NewProcessor(
 			userNamewidget(s, options...),
-			[]interface{}{
-				ValidEmail,
-				s.ValidUserName,
-			},
-			nil,
+			fork.NewValidater(ValidEmail, s.ValidUserName),
+			fork.NewFilterer(),
 		),
 	}
 }
@@ -34,10 +51,9 @@ func userNamewidget(s *Manager, options ...string) fork.Widget {
 }
 
 type userName struct {
-	name         string
-	UserName     string
-	user         user.User
-	validateable bool
+	*securityName
+	UserName string
+	user     user.User
 	fork.Processor
 }
 
@@ -45,15 +61,8 @@ func (u *userName) New() fork.Field {
 	var newfield userName = *u
 	newfield.UserName = ""
 	newfield.user = user.AnonymousUser
-	newfield.validateable = false
+	newfield.SetValidateable(false)
 	return &newfield
-}
-
-func (u *userName) Name(name ...string) string {
-	if len(name) > 0 {
-		u.name = strings.Join(name, "-")
-	}
-	return u.name
 }
 
 func (u *userName) Get() *fork.Value {
@@ -63,25 +72,23 @@ func (u *userName) Get() *fork.Value {
 func (u *userName) Set(r *http.Request) {
 	v := u.Filter(u.Name(), r)
 	u.UserName = v.String()
-	u.validateable = true
+	u.SetValidateable(true)
 }
 
-func (u *userName) Validateable() bool {
-	return u.validateable
-}
+var InvalidEmail = SecurityError(`Invalid email address: %s`)
 
 func ValidEmail(u *userName) error {
-	if u.validateable {
+	if u.Validateable() {
 		_, err := mail.ParseAddress(u.UserName)
 		if err != nil {
-			return fmt.Errorf("Invalid email address: %s", err.Error())
+			return InvalidEmail.Out(err)
 		}
 	}
 	return nil
 }
 
 func (s *Manager) ValidUserName(u *userName) error {
-	if u.validateable {
+	if u.Validateable() {
 		if u.UserName == "" {
 			return MsgError(s, "email_not_provided")
 		}
@@ -105,10 +112,9 @@ var confirmOne = PassWord("confirmable-one", `placeholder="password"`)
 var confirmTwo = PassWord("confirmable-two", `placeholder="confirm password"`)
 
 type next struct {
-	m            *Manager
-	name         string
-	Url          string
-	validateable bool
+	m *Manager
+	*securityName
+	Url string
 	fork.Processor
 }
 
@@ -118,12 +124,12 @@ func nextwidget(options ...string) fork.Widget {
 
 func Next(s *Manager, name string, options ...string) fork.Field {
 	return &next{
-		m:    s,
-		name: name,
+		m:            s,
+		securityName: &securityName{name},
 		Processor: fork.NewProcessor(
 			nextwidget(options...),
-			nil,
-			[]interface{}{nextfilter},
+			fork.NewValidater(),
+			fork.NewFilterer(nextfilter),
 		),
 	}
 }
@@ -138,15 +144,8 @@ func nextfilter(in string) string {
 func (n *next) New() fork.Field {
 	var newfield next = *n
 	newfield.Url = ""
-	newfield.validateable = false
+	newfield.SetValidateable(false)
 	return &newfield
-}
-
-func (n *next) Name(name ...string) string {
-	if len(name) > 0 {
-		n.name = strings.Join(name, "-")
-	}
-	return n.name
 }
 
 func (n *next) Get() *fork.Value {
@@ -163,19 +162,14 @@ func (n *next) Set(r *http.Request) {
 		nxturl = nxt
 	}
 	n.Url = nxturl
-	n.validateable = true
-}
-
-func (n *next) Validateable() bool {
-	return n.validateable
+	n.SetValidateable(true)
 }
 
 type leasedToken struct {
-	m            *Manager
-	name         string
-	key          string
-	validateable bool
-	returned     string
+	m *Manager
+	*securityName
+	key      string
+	returned string
 	fork.Processor
 }
 
@@ -185,12 +179,12 @@ func leasedTokenWidget(options ...string) fork.Widget {
 
 func LeasedToken(m *Manager, name string, options ...string) fork.Field {
 	return &leasedToken{
-		m:    m,
-		name: name,
+		m:            m,
+		securityName: &securityName{name},
 		Processor: fork.NewProcessor(
 			leasedTokenWidget(options...),
-			[]interface{}{ValidateLeasedToken},
-			nil,
+			fork.NewValidater(ValidateLeasedToken),
+			fork.NewFilterer(),
 		),
 	}
 }
@@ -198,15 +192,8 @@ func LeasedToken(m *Manager, name string, options ...string) fork.Field {
 func (l *leasedToken) New() fork.Field {
 	var newfield leasedToken = *l
 	newfield.returned = ""
-	newfield.validateable = false
+	newfield.SetValidateable(false)
 	return &newfield
-}
-
-func (l *leasedToken) Name(name ...string) string {
-	if len(name) > 0 {
-		l.name = strings.Join(name, "-")
-	}
-	return l.name
 }
 
 func (l *leasedToken) Get() *fork.Value {
@@ -215,21 +202,19 @@ func (l *leasedToken) Get() *fork.Value {
 
 func (l *leasedToken) Set(r *http.Request) {
 	l.returned = l.Filter(l.Name(), r).String()
-	l.validateable = true
-}
-
-func (l *leasedToken) Validateable() bool {
-	return l.validateable
+	l.SetValidateable(true)
 }
 
 func (l *leasedToken) Token() string {
 	return l.m.generateToken("leased_token", time.Now().String())
 }
 
+var InvalidLeasedToken = SecurityError("leased token is invalid")
+
 func ValidateLeasedToken(l *leasedToken) error {
-	if l.validateable {
+	if l.Validateable() {
 		if !validLeasedToken(l.m, l.returned) {
-			return InvalidToken
+			return InvalidLeasedToken
 		}
 	}
 	return nil

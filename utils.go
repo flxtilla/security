@@ -1,7 +1,6 @@
 package security
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -12,6 +11,33 @@ import (
 	"github.com/thrisp/fork"
 	"github.com/thrisp/security/user"
 )
+
+type securityError struct {
+	err  string
+	vals []interface{}
+}
+
+func (f *securityError) Error() string {
+	return fmt.Sprintf("[security] %s", fmt.Sprintf(f.err, f.vals...))
+}
+
+func (f *securityError) Out(vals ...interface{}) *securityError {
+	f.vals = vals
+	return f
+}
+
+func SecurityError(err string) *securityError {
+	return &securityError{err: err}
+}
+
+func existsIn(s string, l ...string) bool {
+	for _, x := range l {
+		if s == x {
+			return true
+		}
+	}
+	return false
+}
 
 func nxtByQueryParam(r *http.Request) (string, bool) {
 	ret := r.URL.Query().Get("next")
@@ -91,7 +117,7 @@ func paramToken(f flotilla.Ctx, key string) string {
 	return t.(string)
 }
 
-var InvalidToken = errors.New("[Flotilla-Security] Invalid token.")
+var InvalidToken = SecurityError("invalid token")
 
 func validToken(s *Manager, key, token string) ([]string, error) {
 	sgn := s.Signatory(key)
@@ -137,3 +163,7 @@ func UpdatePassword(f Form) (user.User, error) {
 	newpassword := formPassword(f, "confirmable-one")
 	return usr, usr.Update("password", newpassword)
 }
+
+//func (s *Manager) ConfirmUser(u user.User) error {
+//	u.Update("confirmed", "true")
+//}

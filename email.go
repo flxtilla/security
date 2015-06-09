@@ -6,7 +6,6 @@ import (
 	"html/template"
 	"net/smtp"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/thrisp/flotilla"
 )
 
@@ -82,50 +81,37 @@ func (s *Manager) SendMail(to string, name string, link string) error {
 }
 
 var defaultemailtemplates = map[string]string{
-	"change_notice":             emailcn,
-	"send_confirm_instructions": emailci,
-	"login_instructions":        emailli,
-	"send_reset_instructions":   emailfi,
-	"reset_notice":              emailrn,
-	"welcome_note":              emailwn,
+	"send_confirm_instructions": sci,
+	"login_instructions":        li,
+	"passwordless_instructions": li,
+	"send_reset_instructions":   sri,
+	"change_password_notice":    rn,
 }
 
 const (
-	emailcn = `Greetings {{ .Email }},
-	
-Your password has been changed
-{{ if .Recoverable }}
-If you did not change your password, click the link below to reset it.
-
-{{ .Link }}
-{{ end }}`
-
-	emailci = `Greetings {{ .Email }},
+	sci = `Greetings {{ .Email }},
 
 Please confirm your email through the link below:
 
 {{ .Link }}`
 
-	emailli = `Welcome {{ .Email }}!
+	li = `Welcome {{ .Email }}!
 
 You can log into your account through the link below:
 
 {{ .Link }}`
 
-	emailfi = `Greetings {{ .Email }},
+	sri = `Greetings {{ .Email }},
 	
 Click the link below to reset your password:
 
 {{ .Link }}`
 
-	emailrn = `Greetings {{ .Email }},
+	rn = `Greetings {{ .Email }},
 	
-Your password has been reset`
-
-	emailwn = `Welcome {{ .Email }}!
-
-{{ if .Confirmable }}
-You can confirm your email through the link below:
+Your password has been changed.
+{{ if .Recoverable }}
+If you did not change your password, click the link below to reset it.
 
 {{ .Link }}
 {{ end }}`
@@ -138,12 +124,21 @@ func (s *Manager) sendInstructions(f flotilla.Ctx, form Form, forRoute string) e
 	tag := form.Tag()
 	sendToken := s.generateToken(tag, string(user.Token(tag)), remember)
 	link := s.ExternalUrl(f, forRoute, string(sendToken))
-	fmt.Printf("///// sendInstructions\n")
-	spew.Dump(tag, sendToken, link)
-	fmt.Printf("//////////////////////\n")
 	return s.SendMail(
 		to,
 		fmt.Sprintf("%s_instructions", tag),
 		link,
 	)
+}
+
+func (s *Manager) sendNotice(f flotilla.Ctx, form Form) error {
+	user := formUser(form)
+	to := user.Email()
+	tag := form.Tag()
+	return s.SendMail(
+		to,
+		fmt.Sprintf("%s_notice", tag),
+		"",
+	)
+
 }

@@ -16,6 +16,7 @@ type Identifiable interface {
 	Id() string
 	Email() string
 	Anonymous() bool
+	Confirmed() bool
 	Active() bool
 }
 
@@ -49,6 +50,10 @@ func (a anonymoususer) Email() string {
 
 func (a anonymoususer) Anonymous() bool {
 	return true
+}
+
+func (a anonymoususer) Confirmed() bool {
+	return false
 }
 
 func (a anonymoususer) Active() bool {

@@ -8,6 +8,12 @@ import (
 	"github.com/thrisp/security/user"
 )
 
+var configurationError = SecurityError(`configuration error: %s`)
+
+func ConfigurationErrorString(e error) string {
+	return configurationError.Out(e).Error()
+}
+
 type Configuration func(*Manager) error
 
 func (m *Manager) Configuration(conf ...Configuration) error {
@@ -46,6 +52,13 @@ func Setting(items ...string) Configuration {
 func HashFunction(fn func() hash.Hash) Configuration {
 	return func(s *Manager) error {
 		s.hshfnc = fn
+		return nil
+	}
+}
+
+func WithEmailer(e Emailer) Configuration {
+	return func(s *Manager) error {
+		s.Emailer = e
 		return nil
 	}
 }

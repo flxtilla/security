@@ -2,7 +2,6 @@ package security
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"html/template"
 	"strconv"
@@ -13,24 +12,19 @@ import (
 
 type Form interface {
 	Fresh(...fork.Field) Form
-	Check() (error, bool)
 	fork.Form
 }
-
-type SecurityCheck func(Form) (error, bool)
 
 type securityform struct {
-	m     *Manager
-	check SecurityCheck
+	m *Manager
 	fork.Form
 }
 
-func (m *Manager) NewForm(tag string, sc SecurityCheck, fields ...fork.Field) Form {
+func (m *Manager) NewForm(tag string, check interface{}, fields ...fork.Field) Form {
 	fields = append(fields, fork.SubmitField("submit", nil, nil), Next(m, "next"))
 	return &securityform{
-		m:     m,
-		check: sc,
-		Form:  fork.NewForm(tag, fields...),
+		m:    m,
+		Form: fork.NewForm(tag, fork.Checks(check), fork.Fields(fields...)),
 	}
 }
 
@@ -44,11 +38,10 @@ func (s *securityform) Fresh(with ...fork.Field) Form {
 	if s.m.BoolSetting("form_xsrf") {
 		newform.Form.Fields(s.m.xsrf.New())
 	}
+	if s.m.BoolSetting("form_leased") {
+		newform.Form.Fields(LeasedToken(s.m, "token:lease"))
+	}
 	return &newform
-}
-
-func (s *securityform) Check() (error, bool) {
-	return s.check(s)
 }
 
 func (s *securityform) url() string {
@@ -58,23 +51,29 @@ func (s *securityform) url() string {
 func (s *securityform) menu() *bytes.Buffer {
 	b := new(bytes.Buffer)
 	m := s.m
-	if m.BoolSettings("registerable", "recoverable", "confirmable") {
+	var avail []string
+	tag := s.Tag()
+	if !existsIn(tag, "login", "passwordless") {
+		avail = append(avail, m.FmtSetting(`<li><a href="%s">Login</a></li>`, "login_url"))
+	}
+	if m.BoolSetting("registerable") && !existsIn(tag, "register") {
+		avail = append(avail, m.FmtSetting(`<li><a href="%s">Register</a></li>`, "register_url"))
+	}
+	if m.BoolSetting("recoverable") && !existsIn(tag, "reset", "send_reset") {
+		avail = append(avail, m.FmtSetting(`<li><a href="%s">Forgot Password?</a></li>`, "send_reset_url"))
+	}
+	if m.BoolSetting("confirmable") && !existsIn(tag, "confirm_user", "send_confirm") {
+		avail = append(avail, m.FmtSetting(`<li><a href="%s">Confirm Account</a></li>`, "send_confirm_url"))
+	}
+	if len(avail) > 0 {
 		b.WriteString(`<div class="security-form-menu">`)
 		b.WriteString(`<ul>`)
-		if s.Tag() != "login" || s.Tag() != "passwordless" {
-			b.WriteString(m.FmtSetting(`<li><a href="%s">Login</a></li>`, "login_url"))
-		}
-		if m.BoolSetting("registerable") {
-			b.WriteString(m.FmtSetting(`<li><a href="%s">Register</a></li>`, "register_url"))
-		}
-		if m.BoolSetting("recoverable") {
-			b.WriteString(m.FmtSetting(`<li><a href="%s">Forgot Password?</a></li>`, "send_reset_url"))
-		}
-		if m.BoolSetting("confirmable") {
-			b.WriteString(m.FmtSetting(`<li><a href="%s">Confirm Account</a></li>`, "send_confirm_url"))
+		for _, i := range avail {
+			b.WriteString(i)
 		}
 		b.WriteString(`</ul>`)
 		b.WriteString(`</div>`)
+
 	}
 	return b
 }
@@ -85,7 +84,9 @@ func (s *securityform) WrapForm(e *bytes.Buffer) *bytes.Buffer {
 	b := new(bytes.Buffer)
 	b.Write([]byte(fmt.Sprintf(formhead, s.url(), s.Tag())))
 	b.ReadFrom(e)
-	b.ReadFrom(s.menu())
+	if s.m.BoolSetting("form_menu") {
+		b.ReadFrom(s.menu())
+	}
 	b.Write([]byte("</form>"))
 	return b
 }
@@ -153,35 +154,35 @@ func formNext(f Form) string {
 	return next
 }
 
-var PasswordMismatch = errors.New("Provided passwords do not match")
+var PasswordMismatch = SecurityError("Provided passwords do not match")
 
-func CheckPasswords(f Form) (error, bool) {
-	if f.Valid() {
+func CheckPasswords(f Form) (bool, error) {
+	if f.Valid(f) {
 		p1 := formPassword(f, "confirmable-one")
 		p2 := formPassword(f, "confirmable-two")
 		if p1 != p2 {
-			return PasswordMismatch, false
+			return false, PasswordMismatch
 		}
-		return nil, true
+		return true, nil
 	}
-	return nil, false
+	return false, nil
 }
 
-func CheckUserPassword(f Form) (error, bool) {
-	if f.Valid() {
+func CheckUserPassword(f Form) (bool, error) {
+	if f.Valid(f) {
 		usr := formUser(f)
 		password := formPassword(f, "user-pass")
 		if err := usr.Authenticate(password); err != nil {
-			return err, false
+			return false, err
 		}
-		return nil, true
+		return true, nil
 	}
-	return nil, false
+	return false, nil
 }
 
-func CheckForm(f Form) (error, bool) {
-	if f.Valid() {
-		return nil, true
+func CheckForm(f Form) (bool, error) {
+	if f.Valid(f) {
+		return true, nil
 	}
-	return nil, false
+	return false, nil
 }

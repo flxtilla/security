@@ -79,7 +79,6 @@ func ResetPasswordForm(s *Manager) Form {
 		UserName(s, "user-name"),
 		confirmOne,
 		confirmTwo,
-		LeasedToken(s, "token:reset"),
 	)
 }
 
