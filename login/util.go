@@ -17,6 +17,16 @@ func (l *Manager) Setting(key string) string {
 	return ""
 }
 
+func (l *Manager) Int64Setting(key string) int64 {
+	v := l.Setting(key)
+	if v != "" {
+		if i, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return i
+		}
+	}
+	return 0
+}
+
 func storekey(key string) string {
 	return fmt.Sprintf("LOGIN_%s", strings.ToUpper(key))
 }

@@ -22,7 +22,7 @@ func defaultAuth(m *Manager) smtp.Auth {
 	)
 }
 
-func DefaultEmailer(m *Manager, templates map[string]string) Emailer {
+func NewEmailer(m *Manager, templates map[string]string) Emailer {
 	return &emailer{
 		Auth:      defaultAuth(m),
 		address:   m.Setting("emailer_username"),
@@ -64,81 +64,59 @@ func mkEmailTemplates(m map[string]string) EmailTemplates {
 	return ret
 }
 
-func (s *Manager) emailData(email, link string) map[string]interface{} {
+type EmailData map[string]interface{}
+
+func (s *Manager) emailData(email, link string) EmailData {
 	return map[string]interface{}{
-		"Email":       email,
-		"Link":        link,
-		"Confirmable": s.BoolSetting("confirmable"),
-		"Recoverable": s.BoolSetting("recoverable"),
+		"Email": email,
+		"Link":  link,
 	}
 }
 
-func (s *Manager) SendMail(to string, name string, link string) error {
-	in := s.emailData(to, link)
-	b, err := s.Emailer.Render(name, in)
-	err = s.Emailer.Send(to, b.Bytes())
-	return err
+func (s *Manager) SendMail(template string, to string, link string) error {
+	b, err := s.Emailer.Render(template, s.emailData(to, link))
+	if err != nil {
+		return err
+	}
+	return s.Emailer.Send(to, b.Bytes())
+}
+
+func (s *Manager) sendNotice(f flotilla.Ctx, form Form, forRoute string, template string) error {
+	user, email := formUser(form)
+	_, remember := formRememberMe(form)
+	tag := form.Tag()
+	var ut string
+	if user != nil {
+		ut = fmt.Sprintf("ut:%s", user.Token(tag))
+	}
+	rm := fmt.Sprintf("remember:%s", remember)
+	sendToken := s.Token(tag, ut, rm)
+	link := s.External(f, forRoute, sendToken)
+	return s.SendMail(template, email, link)
 }
 
 var defaultemailtemplates = map[string]string{
-	"send_confirm_instructions": sci,
-	"login_instructions":        li,
-	"passwordless_instructions": li,
-	"send_reset_instructions":   sri,
-	"change_password_notice":    rn,
-}
+	"passwordless": `Welcome {{ .Email }}!
 
-const (
-	sci = `Greetings {{ .Email }},
+Please log into your account through the link below:
 
-Please confirm your email through the link below:
-
-{{ .Link }}`
-
-	li = `Welcome {{ .Email }}!
-
-You can log into your account through the link below:
-
-{{ .Link }}`
-
-	sri = `Greetings {{ .Email }},
+{{ .Link }}`,
+	"send_reset": `Greetings {{ .Email }},
 	
 Click the link below to reset your password:
 
-{{ .Link }}`
-
-	rn = `Greetings {{ .Email }},
+{{ .Link }}`,
+	"reset_password": `Greetings {{ .Email }},
 	
 Your password has been changed.
-{{ if .Recoverable }}
+
 If you did not change your password, click the link below to reset it.
 
 {{ .Link }}
-{{ end }}`
-)
+`,
+	"send_confirm": `Greetings {{ .Email }},
 
-func (s *Manager) sendInstructions(f flotilla.Ctx, form Form, forRoute string) error {
-	user := formUser(form)
-	to := user.Email()
-	_, remember := formRememberMe(form)
-	tag := form.Tag()
-	sendToken := s.generateToken(tag, string(user.Token(tag)), remember)
-	link := s.ExternalUrl(f, forRoute, string(sendToken))
-	return s.SendMail(
-		to,
-		fmt.Sprintf("%s_instructions", tag),
-		link,
-	)
-}
+Please confirm your email through the link below:
 
-func (s *Manager) sendNotice(f flotilla.Ctx, form Form) error {
-	user := formUser(form)
-	to := user.Email()
-	tag := form.Tag()
-	return s.SendMail(
-		to,
-		fmt.Sprintf("%s_notice", tag),
-		"",
-	)
-
+{{ .Link }}`,
 }

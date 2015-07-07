@@ -6,18 +6,7 @@ import (
 	"github.com/thrisp/flotilla"
 )
 
-//"gopkg.in/fatih/set.v0"
-
 type IdentityLoader func(flotilla.Ctx) Identity
-
-func sessionloader(c flotilla.Ctx) Identity {
-	iid, _ := c.Call("getsession", "identity_id")
-	if iid != nil {
-		id := iid.(string)
-		return NewIdentity(id, id)
-	}
-	return Anonymous
-}
 
 type IdentityHandler func(Identity, flotilla.Ctx)
 
@@ -25,8 +14,10 @@ func defaulthandler(i Identity, c flotilla.Ctx) {
 	c.Call("set", "identity", i)
 }
 
-func sessionhandler(i Identity, c flotilla.Ctx) {
-	c.Call("setsession", "identity_id", i.Tag())
+type IdentityRemover func(flotilla.Ctx)
+
+func defaultremover(c flotilla.Ctx) {
+	c.Call("set", "identity", Anonymous)
 }
 
 var Anonymous = NewIdentity("anonymous", "anonymous")

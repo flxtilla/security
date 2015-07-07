@@ -50,7 +50,7 @@ func AnonymousRequired(h flotilla.Manage) flotilla.Manage {
 			h(f)
 		}
 		if auth {
-			f.Call("redirect", 303, s.Setting("after_login_url"))
+			f.Call("redirect", 303, s.BlueprintUrl("after_login_url"))
 		}
 	}
 }
@@ -70,15 +70,15 @@ func LoginRequired(h flotilla.Manage) flotilla.Manage {
 
 func Unauthenticated(f flotilla.Ctx, s *Manager) {
 	s.Flash(f, "unauthenticated")
-	if h := s.login.Handlers["unauthenticated"]; h != nil {
+	if h := s.login.Reloaders["unauthenticated"]; h != nil {
 		h(f)
 	}
-	f.Call("redirect", 303, s.Setting("login_url"))
+	f.Call("redirect", 303, s.BlueprintUrl("login_url"))
 }
 
 func getLogout(f flotilla.Ctx) {
 	s := manager(f)
-	s.LogoutUser()
+	s.LogoutUser(f)
 	s.redirectAfter(f, nil, "logout_successful")
 }
 
@@ -91,7 +91,7 @@ func postLogin(f flotilla.Ctx) {
 		f,
 		"login",
 		func(f flotilla.Ctx, s *Manager, form Form) {
-			user := formUser(form)
+			user, _ := formUser(form)
 			remember, _ := formRememberMe(form)
 			s.LoginUser(user, remember, f)
 			s.redirectAfter(f, form, "login_successful")
@@ -108,20 +108,21 @@ func postSendLogin(f flotilla.Ctx) {
 		f,
 		"passwordless_login",
 		func(f flotilla.Ctx, s *Manager, form Form) {
-			s.sendInstructions(f, form, "getPasswordlessToken")
+			s.sendNotice(f, form, "getPasswordlessToken", "passwordless")
 			s.redirectAfter(f, form, "login_email_sent")
 		},
 	)
 }
 
 func tokenLogin(f flotilla.Ctx) {
-	s, t := manager(f), paramToken(f, "token")
-	usr, remember, valid := validUserToken(s, "passwordless", t)
-	if valid {
+	s, t := manager(f), tokenFromUrl(f, "token")
+	tkn, err := s.Signatory("passwordless").Valid(t)
+	if err != nil {
+		s.forwardTo(f, "passwordless_login.html", "invalid_login_token")
+	} else {
+		usr, remember := validUserToken(s, tkn)
 		s.LoginUser(usr, remember, f)
 		s.redirectAfter(f, nil, "login_successful")
-	} else {
-		s.forwardTo(f, "passwordless_login.html", "invalid_login_token")
 	}
 }
 
@@ -134,20 +135,25 @@ func postSendReset(f flotilla.Ctx) {
 		f,
 		"send_reset",
 		func(f flotilla.Ctx, s *Manager, form Form) {
-			s.sendInstructions(f, form, "getResetToken")
-			s.redirectAfter(f, form, "reset_instructions_sent")
+			s.sendNotice(f, form, "getResetToken", "send_reset")
+			_, email := formUser(form)
+			s.redirectAfter(f, form, "reset_instructions_sent", email)
 		},
 	)
 }
 
 func getResetPassword(f flotilla.Ctx) {
-	s, t := manager(f), paramToken(f, "token")
-	_, _, exists := validUserToken(s, "send_reset", t)
-	if exists {
-		f.Call("rendertemplate", "reset.html", nil)
-	}
-	if !exists {
+	s, t := manager(f), tokenFromUrl(f, "token")
+	tkn, err := s.Signatory("send_reset").Valid(t)
+	if err != nil {
 		s.forwardTo(f, "send_reset.html", "invalid_reset_token")
+	} else {
+		usr, _ := validUserToken(s, tkn)
+		fu := fmt.Sprintf("forUser:%s", usr.Email())
+		vr := fmt.Sprintf("validReset:%s", s.Signatory("reset_password").SignedString())
+		form := s.Forms.byKey("reset_password").Fresh(fu, vr)
+		f.Call("set", form.Tag(), form)
+		f.Call("rendertemplate", "reset_password.html", nil)
 	}
 }
 
@@ -156,21 +162,25 @@ func postResetPassword(f flotilla.Ctx) {
 		f,
 		"reset_password",
 		func(f flotilla.Ctx, s *Manager, form Form) {
-			usr, err := UpdatePassword(form)
+			t, err := s.Signatory("signed").Valid(formSigned(form))
 			if err != nil {
-				s.formFail(f, form, "reset.html")
+				s.formFail(f, form, "send_reset.html")
 			}
-			if err == nil {
-				remember, _ := formRememberMe(form)
-				s.LoginUser(usr, remember, f)
-				s.redirectAfter(f, form, "reset_successful")
+			usr := s.Get(claimString(t.Claims["forUser"]))
+			newpassword := formPassword(form, "confirmable-one")
+			usr.Update("password", newpassword)
+			if s.BoolSetting("send_password_reset_notice_email") {
+				//s.sendNotice(f, form, "getResetToken", "reset_password")
 			}
+			remember, _ := formRememberMe(form)
+			s.LoginUser(usr, remember, f)
+			s.redirectAfter(f, form, "reset_successful")
 		},
 	)
 }
 
 func getChangePassword(f flotilla.Ctx) {
-	f.Call("rendertemplate", "change.html", nil)
+	f.Call("rendertemplate", "change_password.html", nil)
 }
 
 func postChangePassword(f flotilla.Ctx) {
@@ -178,14 +188,13 @@ func postChangePassword(f flotilla.Ctx) {
 		f,
 		"change_password",
 		func(f flotilla.Ctx, s *Manager, form Form) {
-			_, err := UpdatePassword(form)
-			if err != nil {
-				s.formFail(f, form, "change.html")
+			usr, _ := formUser(form)
+			newpassword := formPassword(form, "confirmable-one")
+			usr.Update("password", newpassword)
+			if s.BoolSetting("notify_password_change") {
+				//s.sendNotice(f, form, "getResetToken", "reset_password")
 			}
-			if err == nil {
-				s.sendNotice(f, form)
-				s.redirectAfter(f, form, "password_change")
-			}
+			s.redirectAfter(f, form, "change_password")
 		},
 	)
 }
@@ -199,20 +208,24 @@ func postRegister(f flotilla.Ctx) {
 		f,
 		"register",
 		func(f flotilla.Ctx, s *Manager, form Form) {
-			usr := formNewUser(form)
+			_, usr := formUser(form)
 			password := formPassword(form, "confirmable-one")
 			if _, err := s.New(usr, password); err != nil {
 				s.formFail(f, form, "register.html")
 			}
 			if s.BoolSetting("confirmable") {
-				s.sendInstructions(f, form, "getConfirmToken")
-				s.redirectAfter(f, form, "confirm_registration")
+				sendConfirm(f, s, form)
 			} else {
 				s.Flash(f, "registration_success")
-				f.Call("redirect", 302, s.Setting(s.ManagerLogin()))
+				f.Call("redirect", 302, s.BlueprintUrl(s.ManagerLogin()))
 			}
 		},
 	)
+}
+
+func sendConfirm(f flotilla.Ctx, s *Manager, form Form) {
+	s.sendNotice(f, form, "getConfirmUser", "send_confirm")
+	s.redirectAfter(f, form, "confirm_registration")
 }
 
 func getSendConfirm(f flotilla.Ctx) {
@@ -222,11 +235,8 @@ func getSendConfirm(f flotilla.Ctx) {
 func postSendConfirm(f flotilla.Ctx) {
 	posted(
 		f,
-		"send_confirmation",
-		func(f flotilla.Ctx, s *Manager, form Form) {
-			s.sendInstructions(f, form, "getConfirmToken")
-			s.redirectAfter(f, form, "confirmation_request_sent")
-		},
+		"send_confirm",
+		sendConfirm,
 	)
 }
 
@@ -239,8 +249,18 @@ func postConfirmUser(f flotilla.Ctx) {
 		f,
 		"confirm_user",
 		func(f flotilla.Ctx, s *Manager, form Form) {
-			usr := formUser(form)
-			usr.Update("confirmed", "true")
+			usr, _ := formUser(form)
+			var mess string
+			if usr.Confirmed() {
+				mess = "already_confirmed"
+			}
+			usr.Confirm()
+			if usr.Confirmed() {
+				mess = "email_confirmed"
+			} else {
+				mess = "confirmation_fail"
+			}
+			s.redirectAfter(f, form, mess)
 		},
 	)
 }
@@ -260,53 +280,49 @@ func SecurityRoute(b *flotilla.Blueprint, name string, method string, path strin
 }
 
 func makeBlueprint(s *Manager) *flotilla.Blueprint {
-	bp := flotilla.NewBlueprint(s.Setting("blueprint_prefix"))
+	bp := flotilla.NewBlueprint(s.Prefix())
 
 	SecurityRoute(bp, "logout", "GET", s.Setting("logout_url"), LoginRequired(getLogout))
 
-	passwordless := s.BoolSetting("passwordless")
-
-	lurl := s.Setting("login_url")
-
-	if !passwordless {
+	if !s.Passwordless() {
+		lurl := s.Url("login_url")
 		SecurityRoute(bp, "getLogin", "GET", lurl, AnonymousRequired(getLogin))
 		SecurityRoute(bp, "postLogin", "POST", lurl, AnonymousRequired(postLogin))
 	}
 
-	if passwordless {
-		plurl := s.Setting("passwordless_url")
+	if s.Passwordless() {
+		plurl := s.Url("passwordless_url")
 		SecurityRoute(bp, "getSendLogin", "GET", plurl, AnonymousRequired(getSendLogin))
 		SecurityRoute(bp, "postSendLogin", "POST", plurl, AnonymousRequired(postSendLogin))
-		SecurityRoute(bp, "getPasswordlessToken", "GET", s.Setting("passwordless_token_url"), AnonymousRequired(tokenLogin))
+		SecurityRoute(bp, "getPasswordlessToken", "GET", s.Url("passwordless_token_url"), AnonymousRequired(tokenLogin))
 	}
 
 	if s.BoolSetting("recoverable") {
-		srurl := s.Setting("send_reset_url")
+		srurl := s.Url("send_reset_url")
 		SecurityRoute(bp, "getSendReset", "GET", srurl, AnonymousRequired(getSendReset))
 		SecurityRoute(bp, "postSendReset", "POST", srurl, AnonymousRequired(postSendReset))
-		rurl := s.Setting("reset_url")
-		SecurityRoute(bp, "getResetToken", "GET", s.Setting("reset_token_url"), AnonymousRequired(getResetPassword))
-		SecurityRoute(bp, "postResetToken", "POST", rurl, AnonymousRequired(postResetPassword))
+		SecurityRoute(bp, "getResetToken", "GET", s.Url("reset_token_url"), AnonymousRequired(getResetPassword))
+		SecurityRoute(bp, "postResetPassword", "POST", s.Url("reset_url"), AnonymousRequired(postResetPassword))
 	}
 
 	if s.BoolSetting("changeable") {
-		curl := s.Setting("change_url")
+		curl := s.Url("change_url")
 		SecurityRoute(bp, "getChangePassword", "GET", curl, LoginRequired(getChangePassword))
 		SecurityRoute(bp, "postChangePassword", "POST", curl, LoginRequired(postChangePassword))
 	}
 
 	if s.BoolSetting("registerable") {
-		rurl := s.Setting("register_url")
+		rurl := s.Url("register_url")
 		SecurityRoute(bp, "getRegister", "GET", rurl, AnonymousRequired(getRegister))
 		SecurityRoute(bp, "postRegister", "POST", rurl, AnonymousRequired(postRegister))
 	}
 
 	if s.BoolSetting("confirmable") {
-		curl := s.Setting("send_confirm_url")
-		SecurityRoute(bp, "getSendConfirmation", "GET", curl, getSendConfirm)
-		SecurityRoute(bp, "postSendConfirmation", "POST", curl, postSendConfirm)
-		SecurityRoute(bp, "getConfirmToken", "GET", s.Setting("confirm_token_url"), getConfirmUser)
-		SecurityRoute(bp, "postConfirmToken", "POST", s.Setting("confirm_url"), postConfirmUser)
+		curl := s.Url("send_confirm_url")
+		SecurityRoute(bp, "getSendConfirm", "GET", curl, getSendConfirm)
+		SecurityRoute(bp, "postSendConfirm", "POST", curl, postSendConfirm)
+		SecurityRoute(bp, "getConfirmUser", "GET", s.Url("confirm_token_url"), getConfirmUser)
+		SecurityRoute(bp, "postConfirmUser", "POST", s.Url("confirm_user_url"), postConfirmUser)
 	}
 
 	return bp

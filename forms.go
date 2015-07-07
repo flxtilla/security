@@ -27,11 +27,20 @@ func defaultForms(s *Manager) Forms {
 	}
 }
 
+func ctxForm(c flotilla.Ctx, tag string) Form {
+	f, err := c.Call("get", tag)
+	if f != nil && err == nil {
+		return f.(Form)
+	}
+	return nil
+}
+
 func templateMacro(f Form) func(flotilla.Ctx) template.HTML {
 	return func(c flotilla.Ctx) template.HTML {
-		prev, _ := c.Call("get", f.Tag())
+		prev := ctxForm(c, f.Tag())
 		if prev != nil {
-			return prev.(Form).Render()
+			prev.SetCheckable(true)
+			return prev.Render()
 		}
 		return f.Fresh().Render()
 	}
@@ -45,10 +54,14 @@ func templateMacros(forms map[string]Form) map[string]interface{} {
 	return ret
 }
 
+func securityChecks(sc ...interface{}) []interface{} {
+	return sc
+}
+
 func LoginForm(s *Manager) Form {
 	return s.NewForm(
 		"login",
-		CheckUserPassword,
+		securityChecks(CheckUserPassword),
 		UserName(s, "user-name"),
 		PassWord("user-pass", `placeholder="password"`),
 		fork.BooleanField("rememberme", "Remember Me", false),
@@ -58,7 +71,7 @@ func LoginForm(s *Manager) Form {
 func PasswordlessForm(s *Manager) Form {
 	return s.NewForm(
 		"passwordless",
-		CheckForm,
+		securityChecks(),
 		UserName(s, "user-name"),
 		fork.BooleanField("rememberme", "Remember Me", false),
 	)
@@ -67,7 +80,7 @@ func PasswordlessForm(s *Manager) Form {
 func SendResetForm(s *Manager) Form {
 	return s.NewForm(
 		"send_reset",
-		CheckForm,
+		securityChecks(),
 		UserName(s, "user-name"),
 	)
 }
@@ -75,8 +88,7 @@ func SendResetForm(s *Manager) Form {
 func ResetPasswordForm(s *Manager) Form {
 	return s.NewForm(
 		"reset",
-		CheckPasswords,
-		UserName(s, "user-name"),
+		securityChecks(CheckPasswords),
 		confirmOne,
 		confirmTwo,
 	)
@@ -85,7 +97,8 @@ func ResetPasswordForm(s *Manager) Form {
 func ChangePasswordForm(s *Manager) Form {
 	return s.NewForm(
 		"change",
-		CheckPasswords,
+		securityChecks(CheckPasswords),
+		UserName(s, "user-name"),
 		confirmOne,
 		confirmTwo,
 	)
@@ -94,8 +107,8 @@ func ChangePasswordForm(s *Manager) Form {
 func RegisterForm(s *Manager) Form {
 	return s.NewForm(
 		"register",
-		CheckPasswords,
-		UserName(s, "user-name"),
+		securityChecks(CheckPasswords),
+		NewUserName(s, "user-name"),
 		confirmOne,
 		confirmTwo,
 	)
@@ -104,7 +117,7 @@ func RegisterForm(s *Manager) Form {
 func SendConfirmForm(s *Manager) Form {
 	return s.NewForm(
 		"send_confirm",
-		CheckForm,
+		securityChecks(),
 		UserName(s, "user-name"),
 	)
 }
@@ -112,7 +125,7 @@ func SendConfirmForm(s *Manager) Form {
 func ConfirmUserForm(s *Manager) Form {
 	return s.NewForm(
 		"confirm_user",
-		CheckPasswords,
+		securityChecks(CheckPasswords),
 		UserName(s, "user-name"),
 		confirmOne,
 		confirmTwo,

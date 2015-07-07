@@ -11,7 +11,7 @@ import (
 )
 
 type Form interface {
-	Fresh(...fork.Field) Form
+	Fresh(...interface{}) Form
 	fork.Form
 }
 
@@ -20,32 +20,29 @@ type securityform struct {
 	fork.Form
 }
 
-func (m *Manager) NewForm(tag string, check interface{}, fields ...fork.Field) Form {
+func (m *Manager) NewForm(tag string, c []interface{}, fields ...fork.Field) Form {
 	fields = append(fields, fork.SubmitField("submit", nil, nil), Next(m, "next"))
 	return &securityform{
 		m:    m,
-		Form: fork.NewForm(tag, fork.Checks(check), fork.Fields(fields...)),
+		Form: fork.NewForm(tag, fork.Checks(c...), fork.Fields(fields...)),
 	}
 }
 
-func (s *securityform) Fresh(with ...fork.Field) Form {
+func (s *securityform) Fresh(claims ...interface{}) Form {
 	var newform securityform = *s
 	newform.m = s.m
 	newform.Form = s.Form.New()
-	if len(with) > 0 {
-		newform.Form.Fields(with...)
-	}
-	if s.m.BoolSetting("form_xsrf") {
-		newform.Form.Fields(s.m.xsrf.New())
-	}
-	if s.m.BoolSetting("form_leased") {
-		newform.Form.Fields(LeasedToken(s.m, "token:lease"))
-	}
+	sf := s.signed()
+	newform.Form.Fields(sf.New(claims...))
 	return &newform
 }
 
+func (s *securityform) signed() fork.Field {
+	return s.m.signed
+}
+
 func (s *securityform) url() string {
-	return s.m.Setting(fmt.Sprintf("%s_url", s.Tag()))
+	return s.m.BlueprintUrl(fmt.Sprintf("%s_url", s.Tag()))
 }
 
 func (s *securityform) menu() *bytes.Buffer {
@@ -78,11 +75,25 @@ func (s *securityform) menu() *bytes.Buffer {
 	return b
 }
 
+func (s *securityform) checkederrors() *bytes.Buffer {
+	b := new(bytes.Buffer)
+	_, err := s.Check(s)
+	if err != nil {
+		b.WriteString(`<div class="security-form-errors">`)
+		b.WriteString(err.Error())
+		b.WriteString(`</div>`)
+	}
+	return b
+}
+
 const formhead = `<form class="security-form" action="%s" method="POST" name="%s">`
 
 func (s *securityform) WrapForm(e *bytes.Buffer) *bytes.Buffer {
 	b := new(bytes.Buffer)
 	b.Write([]byte(fmt.Sprintf(formhead, s.url(), s.Tag())))
+	if s.Checkable() {
+		b.ReadFrom(s.checkederrors())
+	}
 	b.ReadFrom(e)
 	if s.m.BoolSetting("form_menu") {
 		b.ReadFrom(s.menu())
@@ -110,20 +121,15 @@ func (s *securityform) Render() template.HTML {
 	return template.HTML(s.String())
 }
 
-func formNewUser(f Form) string {
-	v := f.Values()
-	if n, ok := v["user-name"]; ok {
-		return n.String()
-	}
-	return ""
-}
-
-func formUser(f Form) user.User {
+func formUser(f Form) (user.User, string) {
 	v := f.Values()
 	if u, ok := v["user-name"]; ok {
-		return u.Raw.(user.User)
+		if ru, ok := u.Raw.(user.User); ok {
+			return ru, ru.Email()
+		}
+		return nil, u.String()
 	}
-	return user.AnonymousUser
+	return user.AnonymousUser, user.AnonymousUser.Email()
 }
 
 func formPassword(f Form, key string) string {
@@ -154,35 +160,30 @@ func formNext(f Form) string {
 	return next
 }
 
+func formSigned(f Form) string {
+	v := f.Values()
+	if s, ok := v["signed"]; ok {
+		return s.Raw.(string)
+	}
+	return ""
+}
+
 var PasswordMismatch = SecurityError("Provided passwords do not match")
 
 func CheckPasswords(f Form) (bool, error) {
-	if f.Valid(f) {
-		p1 := formPassword(f, "confirmable-one")
-		p2 := formPassword(f, "confirmable-two")
-		if p1 != p2 {
-			return false, PasswordMismatch
-		}
-		return true, nil
+	p1 := formPassword(f, "confirmable-one")
+	p2 := formPassword(f, "confirmable-two")
+	if p1 != p2 || p1 == "" || p2 == "" {
+		return false, PasswordMismatch
 	}
-	return false, nil
+	return true, nil
 }
 
 func CheckUserPassword(f Form) (bool, error) {
-	if f.Valid(f) {
-		usr := formUser(f)
-		password := formPassword(f, "user-pass")
-		if err := usr.Authenticate(password); err != nil {
-			return false, err
-		}
-		return true, nil
+	usr, _ := formUser(f)
+	password := formPassword(f, "user-pass")
+	if err := usr.Authenticate(password); err != nil {
+		return false, err
 	}
-	return false, nil
-}
-
-func CheckForm(f Form) (bool, error) {
-	if f.Valid(f) {
-		return true, nil
-	}
-	return false, nil
+	return true, nil
 }

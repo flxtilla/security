@@ -10,13 +10,13 @@ type User interface {
 	Updateable
 	Authenticateable
 	Tokenable
+	Confirmable
 }
 
 type Identifiable interface {
 	Id() string
 	Email() string
 	Anonymous() bool
-	Confirmed() bool
 	Active() bool
 }
 
@@ -30,8 +30,13 @@ type Authenticateable interface {
 }
 
 type Tokenable interface {
-	Token(string) []byte
-	Validate(string, []byte) bool
+	Token(string) string
+	Validate(string, string) bool
+}
+
+type Confirmable interface {
+	Confirm()
+	Confirmed() bool
 }
 
 var AnonymousUser = &anonymoususer{Identity: principal.Anonymous}
@@ -51,6 +56,8 @@ func (a anonymoususer) Email() string {
 func (a anonymoususer) Anonymous() bool {
 	return true
 }
+
+func (a anonymoususer) Confirm() {}
 
 func (a anonymoususer) Confirmed() bool {
 	return false
@@ -72,10 +79,10 @@ func (a anonymoususer) Authenticated() bool {
 	return false
 }
 
-func (a anonymoususer) Token(key string) []byte {
-	return []byte("")
+func (a anonymoususer) Token(key string) string {
+	return ""
 }
 
-func (a anonymoususer) Validate(key string, token []byte) bool {
+func (a anonymoususer) Validate(key string, token string) bool {
 	return false
 }

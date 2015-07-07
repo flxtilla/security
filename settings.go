@@ -9,46 +9,46 @@ import (
 type Settings map[string]string
 
 var defaultSettings Settings = Settings{
-	"BLUEPRINT_PREFIX":           "/",
-	"FLASH_MESSAGES":             "t",
-	"LOGIN_URL":                  "/login",
-	"PASSWORDLESS_URL":           "/p/login",
-	"PASSWORDLESS_TOKEN_URL":     "/p/login/:token",
-	"LOGOUT_URL":                 "/logout",
-	"REGISTER_URL":               "/register",
-	"SEND_RESET_URL":             "/send/reset",
-	"RESET_TOKEN_URL":            "/reset/:token",
-	"RESET_URL":                  "/reset",
-	"CHANGE_URL":                 "/change",
-	"SEND_CONFIRM_URL":           "/send/confirm",
-	"CONFIRM_TOKEN_URL":          "/confirm/:token",
-	"CONFIRM_URL":                "/confirm",
-	"FORGOT_PASSWORD_TEMPLATE":   "forgot_password.html",
-	"LOGIN_USER_TEMPLATE":        "login_user.html",
-	"REGISTER_USER_TEMPLATE":     "register_user.html",
-	"RESET_PASSWORD_TEMPLATE":    "reset_password.html",
-	"CHANGE_PASSWORD_TEMPLATE":   "change_password.html",
-	"SEND_CONFIRMATION_TEMPLATE": "send_confirmation.html",
-	"SEND_LOGIN_TEMPLATE":        "send_login.html",
-	"CONFIRMABLE":                "f",
-	"REGISTERABLE":               "f",
-	"RECOVERABLE":                "f",
-	"TRACKABLE":                  "f",
-	"PASSWORDLESS":               "f",
-	"CHANGEABLE":                 "f",
-	"DEFAULT_SALT":               "default-salt",
-	"PASSWORDLESS_SALT":          "login-salt",
-	"SEND_CONFIRM_SALT":          "confirm-salt",
-	"SEND_RESET_SALT":            "reset-salt",
-	"FORM_XSRF":                  "t",
-	"XSRF-SALT":                  "xsrf-salt",
-	"FORM_LEASED":                "t",
-	"LEASED_TOKEN_SALT":          "leased-salt",
-	"LEASED_TOKEN_DURATION":      "5m",
-	"PASSWORDLESS_DURATION":      "12h",
-	"SEND_CONFIRM_DURATION":      "60h",
-	"SEND_RESET_DURATION":        "60h",
-	"FORM_MENU":                  "t",
+	"BLUEPRINT_PREFIX":                 "/",
+	"FLASH_MESSAGES":                   "t",
+	"LOGIN_URL":                        "/login",
+	"PASSWORDLESS_URL":                 "/p/login",
+	"PASSWORDLESS_TOKEN_URL":           "/p/login/:token",
+	"LOGOUT_URL":                       "/logout",
+	"REGISTER_URL":                     "/register",
+	"SEND_RESET_URL":                   "/send/reset",
+	"RESET_TOKEN_URL":                  "/reset/:token",
+	"RESET_URL":                        "/reset",
+	"CHANGE_URL":                       "/change",
+	"SEND_CONFIRM_URL":                 "/send/confirm",
+	"CONFIRM_TOKEN_URL":                "/confirm/:token",
+	"CONFIRM_USER_URL":                 "/confirm",
+	"FORGOT_PASSWORD_TEMPLATE":         "forgot_password.html",
+	"LOGIN_USER_TEMPLATE":              "login_user.html",
+	"REGISTER_USER_TEMPLATE":           "register_user.html",
+	"RESET_PASSWORD_TEMPLATE":          "reset_password.html",
+	"CHANGE_PASSWORD_TEMPLATE":         "change_password.html",
+	"SEND_CONFIRMATION_TEMPLATE":       "send_confirmation.html",
+	"SEND_LOGIN_TEMPLATE":              "send_login.html",
+	"CONFIRMABLE":                      "f",
+	"REGISTERABLE":                     "f",
+	"RECOVERABLE":                      "f",
+	"TRACKABLE":                        "f",
+	"PASSWORDLESS":                     "f",
+	"CHANGEABLE":                       "f",
+	"DEFAULT_SALT":                     "default-salt",
+	"PASSWORDLESS_SALT":                "login-salt",
+	"SEND_CONFIRM_SALT":                "confirm-salt",
+	"SEND_RESET_SALT":                  "reset-salt",
+	"SIGNED_SALT":                      "signed-salt",
+	"LEASED_TOKEN_DURATION":            "5m",
+	"PASSWORDLESS_DURATION":            "12h",
+	"SEND_CONFIRM_DURATION":            "60h",
+	"SEND_RESET_DURATION":              "60h",
+	"FORM_MENU":                        "t",
+	"SEND_PASSWORD_CHANGE_EMAIL":       "t",
+	"SEND_PASSWORD_RESET_NOTICE_EMAIL": "t",
+	"SIGNING_METHOD":                   "HS256",
 }
 
 func storekey(key string) string {
@@ -73,6 +73,7 @@ func (s *Manager) BoolSetting(key string) bool {
 	return false
 }
 
+/*
 func (s *Manager) BoolSettings(keys ...string) bool {
 	for _, key := range keys {
 		if s.BoolSetting(key) {
@@ -81,12 +82,13 @@ func (s *Manager) BoolSettings(keys ...string) bool {
 	}
 	return false
 }
-
+*/
 func (s *Manager) FmtSetting(base, key string) string {
 	out := s.Setting(key)
 	return fmt.Sprintf(base, out)
 }
 
+/*
 func (s *Manager) settingByValue(value string) (string, string) {
 	for k, v := range s.App.Env.Store {
 		if value == v.Value {
@@ -100,3 +102,4 @@ func (s *Manager) settingByValue(value string) (string, string) {
 	}
 	return "", ""
 }
+*/

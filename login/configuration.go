@@ -26,28 +26,14 @@ func UserLoader(fn func(string) user.User) Configuration {
 	}
 }
 
-//func TokenLoader(fn func(string) user.User) Configuration {
-//	return func(l *Manager) error {
-//		l.tokenloader = fn
-//		return nil
-//	}
-//}
-
-func Handler(name string, h flotilla.Manage) Configuration {
+func Reloader(name string, h flotilla.Manage) Configuration {
 	return func(l *Manager) error {
-		l.Handlers[name] = h
+		l.Reloaders[name] = h
 		return nil
 	}
 }
 
-func Unauthorized(h flotilla.Manage) Configuration {
-	return func(l *Manager) error {
-		l.Handlers["unauthorized"] = h
-		return nil
-	}
-}
-
-func Settings(items ...string) Configuration {
+func WithSettings(items ...string) Configuration {
 	return func(l *Manager) error {
 		for _, item := range items {
 			i := strings.Split(item, ":")

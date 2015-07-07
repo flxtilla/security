@@ -2,7 +2,6 @@ package principal
 
 import (
 	"fmt"
-	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -23,132 +22,287 @@ var (
 	p4 Permission = NewPermission("p4")
 )
 
-func PerformRequest(r http.Handler, method, path string) *httptest.ResponseRecorder {
-	req, _ := http.NewRequest(method, path, nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	return w
+type TestIdentities map[string]Identity
+
+var testIdentities TestIdentities = TestIdentities{
+	"t1": NewIdentity("t1", n1),
+	"t2": NewIdentity("t2", n2, "role:c"),
+	"t3": NewIdentity("t3", n3, n4),
+	"t4": NewIdentity("t4", n1, n2),
 }
 
-func testapp(name string, p *Manager) *flotilla.App {
-	f := flotilla.New(name)
-	p.Init(f)
-	f.Configure(f.Configuration...)
-	return f
-}
-
-func testextension(version string) *Manager {
-	switch version {
-	default:
-		return New(UseSession())
+func (t TestIdentities) Get(id string) Identity {
+	if i, ok := t[id]; ok {
+		return i
 	}
+	return NewIdentity(id, id)
 }
 
-func testidentity(p ...interface{}) Identity {
-	return NewIdentity("test", p...)
+func (t TestIdentities) Handle(i Identity, c flotilla.Ctx) {
+	c.Call("setsession", "identity_id", i.Tag())
+}
+
+func (t TestIdentities) Load(c flotilla.Ctx) Identity {
+	iid, _ := c.Call("getsession", "identity_id")
+	if iid != nil {
+		return t.Get(iid.(string))
+	}
+	return Anonymous
+}
+
+func (t TestIdentities) Remove(c flotilla.Ctx) {
+	c.Call("deletesession", "identity_id")
+}
+
+func testapp(t *testing.T, name string, m *Manager) *flotilla.App {
+	a := flotilla.New(name)
+	a.Messaging.Queues["out"] = func(message string) {}
+	m.Init(a)
+	err := a.Configure()
+	if err != nil {
+		t.Errorf("Error in app configuration: %s", err.Error())
+	}
+	return a
+}
+
+func basemanager(c ...Configuration) *Manager {
+	c = append(
+		c,
+		IdentityLoad(testIdentities.Load),
+		IdentityHandle(testIdentities.Handle),
+		IdentityRemove(testIdentities.Remove),
+	)
+	p := New(c...)
+	return p
 }
 
 func TestExtension(t *testing.T) {
-	exists := false
-	f := testapp("test-extension", testextension(""))
-	f.GET("/test", func(c flotilla.Ctx) {
-		p, _ := c.Call("principal")
-		if _, ok := p.(*Manager); ok {
-			exists = true
-		}
-		c.Call("serveplain", 200, []byte("success"))
-	})
-	PerformRequest(f, "GET", "/test")
-	if !exists {
-		t.Errorf("principal extension does not exist")
-	}
+	var exists bool = false
+	a := testapp(t, "principalExtension", basemanager())
+	exp, _ := flotilla.NewExpectation(
+		200, "GET", "/test",
+		func(t *testing.T) flotilla.Manage {
+			return func(c flotilla.Ctx) {
+				l, _ := c.Call("principal")
+				if _, ok := l.(*Manager); ok {
+					exists = true
+				}
+				c.Call("serveplain", 200, "ok")
+			}
+		},
+	)
+	exp.SetPost(
+		func(t *testing.T, r *httptest.ResponseRecorder) {
+			if !exists {
+				t.Errorf("[principal] extension does not exist")
+			}
+		},
+	)
+	flotilla.SimplePerformer(t, a, exp).Perform()
+}
+
+func SetIdentity(i Identity) flotilla.Expectation {
+	exp, _ := flotilla.NewExpectation(
+		200, "GET", fmt.Sprintf("/identity/%s/setup", i.Tag()),
+		func(t *testing.T) flotilla.Manage {
+			return func(c flotilla.Ctx) {
+				manager(c).Change(i, c)
+				ci := currentidentity(c)
+				if i.Tag() != ci.Tag() {
+					t.Errorf(`identity should be %s, but was %+v`, i.Tag(), ci)
+				}
+			}
+		},
+	)
+	return exp
+}
+
+func RemoveIdentity() flotilla.Expectation {
+	var anon Identity = Anonymous
+	exp, _ := flotilla.NewExpectation(
+		200, "GET", "/identity/1",
+		func(t *testing.T) flotilla.Manage {
+			return func(c flotilla.Ctx) {
+				manager(c).Remove(c)
+				anon = currentidentity(c)
+				c.Call("serveplain", 200, "ok")
+			}
+		},
+	)
+	exp.SetPost(
+		func(t *testing.T, r *httptest.ResponseRecorder) {
+			if anon.Tag() != "anonymous" {
+				t.Errorf("identity was %+v, but should be Anonymous", anon)
+			}
+		},
+	)
+	return exp
 }
 
 func TestIdentity(t *testing.T) {
-	identity := ""
-	f := testapp("test-identity", testextension(""))
-	f.GET("/identity", func(c flotilla.Ctx) {
-		manager(c).Change(testidentity())
-		c.Call("serveplain", 200, []byte("success"))
-		idty, _ := c.Call("getsession", "identity_id")
-		identity = idty.(string)
-	})
-	PerformRequest(f, "GET", "/identity")
-	if identity != "test" {
-		t.Errorf(fmt.Sprintf("test identity should be 'test', got %s", identity))
+	a := testapp(t, "testIdentity", basemanager())
+	exp1 := SetIdentity(testIdentities.Get("t1"))
+	exp2 := RemoveIdentity()
+	exp3 := SetIdentity(testIdentities.Get("t2"))
+	exp4, _ := flotilla.NewExpectation(
+		200, "GET", "/identity/2",
+		func(t *testing.T) flotilla.Manage {
+			return func(c flotilla.Ctx) {
+				idty, _ := c.Call("currentidentity")
+				ci := idty.(Identity)
+				if ci.Tag() != "t2" {
+					t.Errorf(`identity should be "t2", but was %+v`, ci)
+				}
+				c.Call("serveplain", 200, "ok")
+			}
+		},
+	)
+	flotilla.SessionPerformer(t, a, exp1, exp2, exp3, exp4).Perform()
+}
+
+type tidentity struct {
+	i Identity
+	p []Permission
+	e bool
+}
+
+func Tidentity(i Identity, expects bool, p ...Permission) *tidentity {
+	return &tidentity{
+		i: i,
+		p: p,
+		e: expects,
 	}
 }
 
-func testallow(t *testing.T, test string, i Identity, expected bool, permissions ...Permission) {
-	for _, permission := range permissions {
-		result := permission.Allows(i)
-		if result != expected {
-			t.Errorf(fmt.Sprintf("%s: identity %+v not allowed for permission %+v; result was %t, expected %t", test, i, permission, result, expected))
+func (i *tidentity) testAllow(t *testing.T) {
+	for _, p := range i.p {
+		ir := i.i.Can(p)
+		if ir != i.e {
+			t.Errorf(
+				"%s : identity.Can was %t, expected %t",
+				i.i.Tag(), ir, i.e,
+			)
+		}
+		pr := p.Allows(i.i)
+		if pr != i.e {
+			t.Errorf(
+				"%s : permission.Allows was %t, expected %t",
+				p.Tag(), pr, i.e,
+			)
 		}
 	}
 }
 
-func testrequire(t *testing.T, test string, i Identity, expected bool, permissions ...Permission) {
-	for _, permission := range permissions {
-		result := permission.Requires(i)
-		if result != expected {
-			t.Errorf(fmt.Sprintf("%s: identity %+v not required for permission %+v; result was %t, expected %t", test, i, permission, result, expected))
+func (i *tidentity) testRequire(t *testing.T) {
+	for _, p := range i.p {
+		ir := i.i.Must(p)
+		if ir != i.e {
+			t.Errorf("%s identity.Must was %t, expected %t", i.i.Tag(), ir, i.e)
+		}
+		pr := p.Requires(i.i)
+		if pr != i.e {
+			t.Errorf("%s permission.Requires was %t, expected %t", p.Tag(), pr, i.e)
 		}
 	}
 }
 
-func needhandler(t *testing.T, test string, kind string, i Identity, expected bool, permissions ...Permission) flotilla.Manage {
-	return func(c flotilla.Ctx) {
-		p := manager(c)
-		p.Change(i)
-		switch kind {
-		case "allow":
-			testallow(t, test, i, expected, permissions...)
-		case "require":
-			testrequire(t, test, i, expected, permissions...)
+func needHandlerAllow(t *testing.T, i *tidentity) flotilla.Tanage {
+	return func(t *testing.T) flotilla.Manage {
+		return func(c flotilla.Ctx) {
+			i.testAllow(t)
+			c.Call("serveplain", 200, "ok")
 		}
-		c.Call("serveplain", 200, []byte("success"))
+	}
+}
+
+func needHandlerRequire(t *testing.T, i *tidentity) flotilla.Tanage {
+	return func(t *testing.T) flotilla.Manage {
+		return func(c flotilla.Ctx) {
+			i.testRequire(t)
+			c.Call("serveplain", 200, "ok")
+		}
 	}
 }
 
 func TestPermission(t *testing.T) {
-	extension := testextension("")
-	f := testapp("test-identity", extension)
-	f.GET("/permission_allow", needhandler(t, "TestPermission :: allow", "allow", testidentity(n1, n2), true, p0))
-	f.GET("/permission_allow_no", needhandler(t, "TestPermission :: allow_no", "allow", testidentity(n1, n2), false, p2))
-	f.GET("/permission_require", needhandler(t, "TestPermission :: require", "require", testidentity(n1, n2), true, p1))
-	f.GET("/permission_require_no", needhandler(t, "TestPermission :: require_no", "require", testidentity(n1, n2), false, p2))
-	PerformRequest(f, "GET", "/permission_allow")
-	PerformRequest(f, "GET", "/permission_allow_no")
-	PerformRequest(f, "GET", "/permission_require")
-	PerformRequest(f, "GET", "/permission_require_no")
+	if p0.Tag() != "p0" {
+		t.Errorf(`permission tag was %s, but should be "p0"`)
+	}
+}
+
+func TestPermissions(t *testing.T) {
+	a := testapp(t, "testPermissions", basemanager())
+	ti := testIdentities.Get("t4")
+	exp0 := SetIdentity(ti)
+	exp1, _ := flotilla.NewExpectation(
+		200, "GET", "/permission_allow",
+		needHandlerAllow(t, Tidentity(ti, true, p0)),
+	)
+	exp2, _ := flotilla.NewExpectation(
+		200, "GET", "/permission_allow_no",
+		needHandlerAllow(t, Tidentity(ti, false, p2)),
+	)
+	exp3, _ := flotilla.NewExpectation(
+		200, "GET", "/permission_require",
+		needHandlerRequire(t, Tidentity(ti, true, p1)),
+	)
+	exp4, _ := flotilla.NewExpectation(
+		200, "GET", "/permission_require_no",
+		needHandlerRequire(t, Tidentity(ti, false, p2)),
+	)
+	flotilla.SessionPerformer(t, a, exp0, exp1, exp2, exp3, exp4).Perform()
 }
 
 func TestSufficient(t *testing.T) {
-	//identity := testidentity(n1, n2)
-	//extension := testextension("")
-	//f := testapp("test-identity", extension)
-	//f.GET("/nil", func(c *flotilla.Ctx) { p := manager(c); p.Change(identity); fmt.Printf("%+v\n", c.Session) })
-	//f.GET("/sufficient_permission", func(c *flotilla.Ctx) {
-	//	fmt.Printf("before: %+v\n", c.Session)
-	//	p := manager(c)
-	//	p.Change(identity)
-	//	fmt.Printf("after: %+v\n", c.Session)
-	//})
-	//w := httptest.NewRecorder()
-	//req, _ := http.NewRequest("GET", "/nil", nil)
-	//f.ServeHTTP(w, req)
-	//f.ServeHTTP(w, req)
-	//f.ServeHTTP(w, req)
-	//f.ServeHTTP(w, req)
-	//req, _ := http.NewRequest("GET", "/sufficient_permission", nil)
-	//f.ServeHTTP(w, req)
-	//f.ServeHTTP(w, req)
-	//f.ServeHTTP(w, req)
-	//fmt.Printf("%+v\n", w)
+	a := testapp(
+		t,
+		"testSufficient",
+		basemanager(Unauthorized(
+			func(c flotilla.Ctx) {
+				c.Call("serveplain", 403, "testing: unauthorized")
+			},
+		)),
+	)
+	ti := testIdentities.Get("t4")
+	exp1 := SetIdentity(ti)
+	exp2, _ := flotilla.NewExpectation(
+		200, "GET", "/sufficient/yes",
+		func(t *testing.T) flotilla.Manage {
+			return Sufficient(func(c flotilla.Ctx) {}, p0)
+		},
+	)
+	exp3, _ := flotilla.NewExpectation(
+		403, "GET", "/sufficient/no",
+		func(t *testing.T) flotilla.Manage {
+			return Sufficient(func(c flotilla.Ctx) {
+				t.Error("[principal] Handler was called, but should not be called")
+			},
+				p2,
+			)
+		},
+	)
+	flotilla.SessionPerformer(t, a, exp1, exp2, exp3).Perform()
 }
 
 func TestNecessary(t *testing.T) {
-	//f.GET("/permission2", Necessary(permissionhandler(testidentity(n1, n2)), p2))
-	//f.GET("/permission3", Necessary(permissionhandler(testidentity(n1, n2)), p3))
+	a := testapp(t, "testNecessary", basemanager())
+	ti := testIdentities.Get("t4")
+	exp1 := SetIdentity(ti)
+	exp2, _ := flotilla.NewExpectation(
+		200, "GET", "/necessary/yes",
+		func(t *testing.T) flotilla.Manage {
+			return Necessary(func(c flotilla.Ctx) {}, p1)
+		},
+	)
+	exp3, _ := flotilla.NewExpectation(
+		403, "GET", "/necessary/no",
+		func(t *testing.T) flotilla.Manage {
+			return Necessary(func(c flotilla.Ctx) {
+				t.Error("[principal] Handler was called, but should not be called")
+			},
+				p3,
+			)
+		},
+	)
+	flotilla.SessionPerformer(t, a, exp1, exp2, exp3).Perform()
 }

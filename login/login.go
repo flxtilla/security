@@ -2,45 +2,40 @@ package login
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/thrisp/flotilla"
 	"github.com/thrisp/flotilla/session"
 	"github.com/thrisp/security/user"
 )
 
-type (
-	handlers map[string]flotilla.Manage
+type Manager struct {
+	s          session.SessionStore
+	userloader func(string) user.User
+	App        *flotilla.App
+	Settings   map[string]string
+	Reloaders  map[string]flotilla.Manage
+}
 
-	Manager struct {
-		s          session.SessionStore
-		userloader func(string) user.User
-		//tokenloader func(string) user.User
-		App      *flotilla.App
-		Settings map[string]string
-		Handlers map[string]flotilla.Manage
-	}
-)
-
-var (
-	defaultsettings map[string]string = map[string]string{
-		"COOKIE_NAME":          "remember_token",
-		"COOKIE_DURATION":      "31",
-		"COOKIE_PATH":          "/",
-		"MESSAGE_CATEGORY":     "message",
-		"REFERESH_MESSAGE":     "Please reauthenticate to access this page.",
-		"UNAUTHORIZED_MESSAGE": "Please log in to access this page",
-	}
-)
+var defaultsettings map[string]string = map[string]string{
+	"COOKIE_NAME":             "remember_token",
+	"COOKIE_DURATION":         "31",
+	"COOKIE_PATH":             "/",
+	"MESSAGE_CATEGORY":        "login-message",
+	"REFERESH_MESSAGE":        "Please reauthenticate to access this page.",
+	"FRESH_FOR":               "7200",
+	"UNAUTHENTICATED_MESSAGE": "Please log in to access this page",
+}
 
 func New(c ...Configuration) *Manager {
 	l := &Manager{
-		Settings: defaultsettings,
-		Handlers: make(handlers),
+		Settings:  defaultsettings,
+		Reloaders: make(map[string]flotilla.Manage),
 	}
-	c = append(c, Handler("cookie", l.GetRemembered))
+	c = append(c, Reloader("cookie", l.GetRemembered))
 	err := l.Configure(c...)
 	if err != nil {
-		panic(fmt.Sprintf("[FLOTILLA-LOGIN] configuration error: %s", err))
+		panic(fmt.Sprintf("[login] configuration error: %s", err))
 	}
 
 	return l
@@ -65,27 +60,18 @@ func (l *Manager) Init(app *flotilla.App) {
 	app.Use(l.UpdateRemembered)
 }
 
-func (l *Manager) reloaders() []flotilla.Manage {
-	ret := []flotilla.Manage{}
-	for _, rl := range []string{"cookie", "request", "token", "header"} {
-		if h, ok := l.Handlers[rl]; ok {
-			ret = append(ret, h)
-		}
-	}
-	return ret
-}
-
 func (l *Manager) Reload(c flotilla.Ctx) {
 	l.s = flotillaSession(c)
-	if uid := l.s.Get("user_id"); uid != nil {
-		for _, fn := range l.reloaders() {
+	if l.currentusertoken() == "" {
+		for _, fn := range l.Reloaders {
 			fn(c)
 		}
 	}
+	l.reloaduser()
 }
 
-func (l *Manager) currentuserid() string {
-	if uid := l.s.Get("user_id"); uid != nil {
+func (l *Manager) currentusertoken() string {
+	if uid := l.s.Get("user_token"); uid != nil {
 		return uid.(string)
 	}
 	return ""
@@ -103,12 +89,9 @@ func (l *Manager) CurrentUser() user.User {
 	return u.(user.User)
 }
 
-func (l *Manager) LoginUser(u user.User, remember bool, fresh bool) bool {
-	if !u.Active() {
-		return false
-	}
-	l.s.Set("user_id", u.Id())
-	l.s.Set("_fresh", fresh)
+func (l *Manager) LoginUser(u user.User, remember bool) bool {
+	l.s.Set("user_token", u.Token("login"))
+	l.s.Set("_fresh", time.Now().Unix())
 	l.s.Set("user", u)
 	if remember {
 		l.s.Set("remember", "set")
@@ -118,9 +101,9 @@ func (l *Manager) LoginUser(u user.User, remember bool, fresh bool) bool {
 
 func (l *Manager) LogoutUser() bool {
 	l.s.Delete("user")
-	l.s.Delete("user_id")
+	l.s.Delete("user_token")
 	l.s.Set("remember", "clear")
-	l.s.Set("_fresh", false)
+	l.s.Delete("_fresh")
 	l.reloaduser()
 	return true
 }
@@ -133,7 +116,7 @@ func (l *Manager) LoadUser(userid string) user.User {
 }
 
 func (l *Manager) reloaduser() {
-	l.loaduser(l.currentuserid())
+	l.loaduser(l.currentusertoken())
 }
 
 func (l *Manager) loaduser(userid string) {
@@ -142,11 +125,10 @@ func (l *Manager) loaduser(userid string) {
 
 func (l *Manager) Unauthenticated(c flotilla.Ctx) {
 	c.Call("flash", l.Setting("message_category"), l.Setting("unauthenticated_message"))
-	if h := l.Handlers["unauthenticated"]; h != nil {
+	if h, ok := l.Reloaders["unauthenticated"]; ok {
 		h(c)
-	}
-	if loginurl := l.Setting("login_url"); loginurl != "" {
-		c.Call("redirect", 303, loginurl)
+	} else if loginurl := l.Setting("login_url"); loginurl != "" {
+		c.Call("redirect", 307, loginurl)
 	} else {
 		c.Call("status", 401)
 	}
@@ -161,8 +143,7 @@ func manager(c flotilla.Ctx) *Manager {
 // aborting with 401 if unauthenticated.
 func RequireLogin(c flotilla.Ctx) {
 	l := manager(c)
-	currentuser := l.CurrentUser()
-	if !currentuser.Authenticated() {
+	if !l.CurrentUser().Authenticated() {
 		l.Unauthenticated(c)
 	}
 }
@@ -180,23 +161,31 @@ func LoginRequired(h flotilla.Manage) flotilla.Manage {
 	}
 }
 
+func (l *Manager) fresh(f int64) bool {
+	nw := time.Now().Unix()
+	cmp := (nw - f)
+	if cmp >= 0 && cmp <= l.Int64Setting("FRESH_FOR") {
+		return true
+	}
+	return false
+}
+
 func (l *Manager) NeedsRefresh() bool {
-	if fresh := l.s.Get("_fresh"); fresh != nil {
-		return !fresh.(bool)
+	if freshAt := l.s.Get("_fresh"); freshAt != nil {
+		frsh := freshAt.(int64)
+		return !l.fresh(frsh)
 	}
 	return true
 }
 
 func (l *Manager) Refresh(c flotilla.Ctx) {
-	if h := l.Handlers["refresh"]; h != nil {
+	c.Call("flash", l.Setting("message_category"), l.Setting("refresh_message"))
+	if h := l.Reloaders["refresh"]; h != nil {
 		h(c)
+	} else if refreshurl := l.Setting("refresh_url"); refreshurl != "" {
+		c.Call("redirect", 307, refreshurl)
 	} else {
-		c.Call("flash", l.Setting("message_category"), l.Setting("refresh_message"))
-		if refreshurl := l.Setting("refresh_url"); refreshurl != "" {
-			c.Call("redirect", 303, refreshurl)
-		} else {
-			c.Call("status", 403)
-		}
+		c.Call("status", 403)
 	}
 }
 
@@ -213,7 +202,7 @@ func RefreshRequired(h flotilla.Manage) flotilla.Manage {
 
 func (l *Manager) SetRemembered(c flotilla.Ctx) {
 	name := l.Setting("COOKIE_NAME")
-	value, _ := c.Call("getsession", "user_id")
+	value, _ := c.Call("getsession", "user_token")
 	duration := cookieseconds(l.Setting("COOKIE_DURATION"))
 	path := l.Setting("COOKIE_PATH")
 	_, _ = c.Call("securecookie", name, value.(string), duration, path)
@@ -226,9 +215,8 @@ func readcookies(c flotilla.Ctx) map[string]string {
 
 func (l *Manager) GetRemembered(c flotilla.Ctx) {
 	if cookie, ok := readcookies(c)[l.Setting("COOKIE_NAME")]; ok {
-		c.Call("setsession", "user_id", cookie)
-		c.Call("setsession", "_fresh", false)
-		l.reloaduser()
+		c.Call("setsession", "user_token", cookie)
+		c.Call("deletesession", "_fresh")
 	}
 }
 

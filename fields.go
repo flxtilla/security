@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"net/mail"
 	"strings"
-	"time"
 
 	"github.com/thrisp/fork"
+	"github.com/thrisp/security/token"
 	"github.com/thrisp/security/user"
 )
 
@@ -29,6 +29,11 @@ func (s *securityName) ReName(rename ...string) string {
 func (s *securityName) Copy() *securityName {
 	var ret securityName = *s
 	return &ret
+}
+
+func NewUserName(s *Manager, name string, options ...string) fork.Field {
+	//user name exists validater
+	return fork.TextField(name, []interface{}{fork.ValidEmail}, nil, options...)
 }
 
 func UserName(s *Manager, name string, options ...string) fork.Field {
@@ -57,7 +62,7 @@ type userName struct {
 	fork.Processor
 }
 
-func (u *userName) New() fork.Field {
+func (u *userName) New(i ...interface{}) fork.Field {
 	var newfield userName = *u
 	newfield.UserName = ""
 	newfield.user = user.AnonymousUser
@@ -75,13 +80,13 @@ func (u *userName) Set(r *http.Request) {
 	u.SetValidateable(true)
 }
 
-var InvalidEmail = SecurityError(`Invalid email address: %s`)
+var InvalidEmail = SecurityError(`Invalid email address: %s`).Out
 
 func ValidEmail(u *userName) error {
 	if u.Validateable() {
 		_, err := mail.ParseAddress(u.UserName)
 		if err != nil {
-			return InvalidEmail.Out(err)
+			return InvalidEmail(err)
 		}
 	}
 	return nil
@@ -92,14 +97,14 @@ func (s *Manager) ValidUserName(u *userName) error {
 		if u.UserName == "" {
 			return MsgError(s, "email_not_provided")
 		}
-		user := s.Get(u.UserName)
-		if user.Anonymous() {
+		usr := s.Get(u.UserName)
+		if usr.Anonymous() {
 			return MsgError(s, "user_does_not_exist")
 		}
-		if !user.Active() {
+		if !usr.Active() {
 			return MsgError(s, "disabled_account")
 		}
-		u.user = user
+		u.user = usr
 	}
 	return nil
 }
@@ -141,7 +146,7 @@ func nextfilter(in string) string {
 	return in
 }
 
-func (n *next) New() fork.Field {
+func (n *next) New(i ...interface{}) fork.Field {
 	var newfield next = *n
 	newfield.Url = ""
 	newfield.SetValidateable(false)
@@ -155,66 +160,73 @@ func (n *next) Get() *fork.Value {
 func (n *next) Set(r *http.Request) {
 	var nxturl string
 	nxturl = n.Filter(n.Name(), r).String()
-	if nxt, ok := nxtByQueryParam(r); ok {
-		nxturl = nxt
-	}
-	if nxt, ok := nxtByPath(r, n.m); ok {
-		nxturl = nxt
-	}
+	nxturl = n.m.nxtAbsolute(r, nil)
 	n.Url = nxturl
 	n.SetValidateable(true)
 }
 
-type leasedToken struct {
-	m *Manager
+type signed struct {
 	*securityName
-	key      string
-	returned string
+	signatory token.Signatory
+	claims    []string
+	returned  string
 	fork.Processor
 }
 
-func leasedTokenWidget(options ...string) fork.Widget {
+func tokenWidget(options ...string) fork.Widget {
 	return fork.NewWidget(fmt.Sprintf(`<input type="hidden" name="{{ .Name }}" value="{{ .Token }}" %s>`, strings.Join(options, " ")))
 }
 
-func LeasedToken(m *Manager, name string, options ...string) fork.Field {
-	return &leasedToken{
-		m:            m,
+func Signed(name string, s token.Signatory, options ...string) fork.Field {
+	return &signed{
 		securityName: &securityName{name},
+		signatory:    s,
 		Processor: fork.NewProcessor(
-			leasedTokenWidget(options...),
-			fork.NewValidater(ValidateLeasedToken),
+			tokenWidget(options...),
+			fork.NewValidater(ValidateSigned),
 			fork.NewFilterer(),
 		),
 	}
 }
 
-func (l *leasedToken) New() fork.Field {
-	var newfield leasedToken = *l
+func (s *signed) New(i ...interface{}) fork.Field {
+	var newfield signed = *s
 	newfield.returned = ""
+	newfield.claims = toStr(i)
 	newfield.SetValidateable(false)
 	return &newfield
 }
 
-func (l *leasedToken) Get() *fork.Value {
-	return fork.NewValue(l.returned)
+func toStr(i []interface{}) []string {
+	var ret []string
+	for _, v := range i {
+		if st, ok := v.(string); ok {
+			ret = append(ret, st)
+		}
+	}
+	return ret
 }
 
-func (l *leasedToken) Set(r *http.Request) {
-	l.returned = l.Filter(l.Name(), r).String()
-	l.SetValidateable(true)
+func (s *signed) Get() *fork.Value {
+	return fork.NewValue(s.returned)
 }
 
-func (l *leasedToken) Token() string {
-	return l.m.generateToken("leased_token", time.Now().String())
+func (s *signed) Set(r *http.Request) {
+	s.returned = s.Filter(s.Name(), r).String()
+	s.SetValidateable(true)
 }
 
-var InvalidLeasedToken = SecurityError("leased token is invalid")
+func (s *signed) Token() string {
+	return s.signatory.SignedString(s.claims...)
+}
 
-func ValidateLeasedToken(l *leasedToken) error {
-	if l.Validateable() {
-		if !validLeasedToken(l.m, l.returned) {
-			return InvalidLeasedToken
+var InvalidSignedField = SecurityError("Signed field is invalid: %s").Out
+
+func ValidateSigned(s *signed) error {
+	if s.Validateable() {
+		if _, err := s.signatory.Valid(s.returned); err != nil {
+			//spew.Dump(t, err, s.returned)
+			return InvalidSignedField(err.Error())
 		}
 	}
 	return nil

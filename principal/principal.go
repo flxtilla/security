@@ -3,20 +3,16 @@ package principal
 import "github.com/thrisp/flotilla"
 
 type Manager struct {
-	DataStore
-	ctx          flotilla.Ctx
 	loaders      []IdentityLoader
 	handlers     []IdentityHandler
+	removers     []IdentityRemover
 	unauthorized flotilla.Manage
 }
 
-func New(c ...Conf) *Manager {
+func New(c ...Configuration) *Manager {
 	p := &Manager{}
-	c = append(c, IdentityHandle(defaulthandler))
+	c = append(c, IdentityHandle(defaulthandler), IdentityRemove(defaultremover))
 	p.Configure(c...)
-	if p.DataStore == nil {
-		p.DataStore = DefaultDataStore()
-	}
 	return p
 }
 
@@ -36,35 +32,40 @@ func (p *Manager) mkfxtension() flotilla.Fxtension {
 	return flotilla.MakeFxtension("fxprincipal", mkextension(p))
 }
 
-func (p *Manager) Change(i Identity) {
-	p.Handle(i)
+func (p *Manager) OnRequest(c flotilla.Ctx) {
+	p.LoadIdentity(c)
 }
 
 func (p *Manager) LoadIdentity(c flotilla.Ctx) Identity {
-	identity := Anonymous
+	i := Anonymous
 	for _, loader := range p.loaders {
-		identity = loader(c)
+		i = loader(c)
 	}
-	p.Handle(identity)
-	return identity
+	p.Handle(i, c)
+	return i
 }
 
-func (p *Manager) Handle(i Identity) {
+func (p *Manager) Handle(i Identity, c flotilla.Ctx) {
 	for _, h := range p.handlers {
-		h(i, p.ctx)
+		h(i, c)
 	}
 }
 
-func (p *Manager) OnRequest(c flotilla.Ctx) {
-	p.ctx = c
-	p.LoadIdentity(c)
+func (p *Manager) Change(i Identity, c flotilla.Ctx) {
+	p.Handle(i, c)
+}
+
+func (p *Manager) Remove(c flotilla.Ctx) {
+	for _, r := range p.removers {
+		r(c)
+	}
 }
 
 func (p *Manager) Unauthorized(c flotilla.Ctx) {
 	if p.unauthorized != nil {
 		p.unauthorized(c)
 	} else {
-		c.Call("status", 401)
+		c.Call("status", 403)
 	}
 }
 

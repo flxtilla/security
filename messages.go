@@ -12,7 +12,7 @@ var defaultMessages map[string]Message = map[string]Message{
 	"confirm_registration":       Msg("Thank you. Confirmation instructions have been sent to %s.", "success"),
 	"registration_error":         Msg("Error in registering user: %s", "error"),
 	"registration_success":       Msg("Registration success", "success"),
-	"email_confirmed":            Msg("Thank you. Your email has been confirmed.", "success"),
+	"email_confirmed":            Msg("Thank you. Your account email has been confirmed.", "success"),
 	"already_confirmed":          Msg("Your email has already been confirmed.", "info"),
 	"invalid_confirmation_token": Msg("Invalid confirmation token.", "error"),
 	"email_already_associated":   Msg("%s is already associated with an account.", "error"),
@@ -25,6 +25,7 @@ var defaultMessages map[string]Message = map[string]Message{
 	"confirmation_required":      Msg("Email requires confirmation.", "error"),
 	"confirmation_request_sent":  Msg("Confirmation instructions have been sent to %s.", "info"),
 	"confirmation_expired":       Msg("You did not confirm your email within %s. New instructions to confirm your email have been sent to %s.", "error"),
+	"confirmation_fail":          Msg("User was not confirmed.", "error"),
 	"login_expired":              Msg("You did not login within %s. New instructions to login have been sent to %s.", "error"),
 	"login_email_sent":           Msg("Instructions to login have been sent to the provided email address.", "success"),
 	"invalid_login_token":        Msg("Invalid login token.", "error"),
@@ -83,11 +84,19 @@ func (s *Manager) Message(ms string) Message {
 	return Msg(fmt.Sprintf(`message "%s" does not exist`, ms), "error")
 }
 
+func marshalStrings(in []string) []interface{} {
+	var ret []interface{}
+	for _, v := range in {
+		ret = append(ret, v)
+	}
+	return ret
+}
+
 func (s *Manager) fmtMessage(messages ...string) (string, string) {
 	pre := s.Message(messages[0])
 	var out string
 	if len(messages) > 1 {
-		out = fmt.Sprintf(pre.String(), messages[1:])
+		out = fmt.Sprintf(pre.String(), marshalStrings(messages[1:])...)
 	} else {
 		out = pre.String()
 	}
