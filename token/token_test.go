@@ -37,7 +37,8 @@ var tokenTestData = []struct {
 		"basic expired",
 		"", // autogen
 		defaultKeyFunc,
-		map[string]interface{}{"foo": "bar", "exp": float64(time.Now().Unix() - 100)},
+		map[string]interface{}{"foo": "bar", "exp": tMinus(100)},
+		//map[string]interface{}{"foo": "bar", "exp": float64(time.Now().Unix() - 100)},
 		false,
 		ValidationErrorExpired,
 	},
@@ -45,7 +46,7 @@ var tokenTestData = []struct {
 		"basic nbf",
 		"", // autogen
 		defaultKeyFunc,
-		map[string]interface{}{"foo": "bar", "nbf": float64(time.Now().Unix() + 100)},
+		map[string]interface{}{"foo": "bar", "nbf": tPlus(100)},
 		false,
 		ValidationErrorNotValidYet,
 	},
@@ -53,7 +54,7 @@ var tokenTestData = []struct {
 		"expired and nbf",
 		"", // autogen
 		defaultKeyFunc,
-		map[string]interface{}{"foo": "bar", "nbf": float64(time.Now().Unix() + 100), "exp": float64(time.Now().Unix() - 100)},
+		map[string]interface{}{"foo": "bar", "nbf": tPlus(100), "exp": tMinus(100)},
 		false,
 		ValidationErrorNotValidYet | ValidationErrorExpired,
 	},
@@ -89,6 +90,18 @@ var tokenTestData = []struct {
 		false,
 		ValidationErrorUnverifiable,
 	},
+}
+
+func tMinus(val int) string {
+	n := time.Now()
+	nt := n.Truncate(time.Duration(val) * time.Minute)
+	return nt.Format(time.UnixDate)
+}
+
+func tPlus(val int) string {
+	n := time.Now()
+	nt := n.Add(time.Duration(val) * time.Minute)
+	return nt.Format(time.UnixDate)
 }
 
 func mkTokenString(c map[string]interface{}) string {

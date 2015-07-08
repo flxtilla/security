@@ -21,6 +21,7 @@ type Manager struct {
 	signed    fork.Field
 	Settings
 	Urls
+	Times
 	Forms
 	Messages
 	Signatories
@@ -87,6 +88,7 @@ func (s *Manager) configureUnset() {
 		s.Emailer = NewEmailer(s, defaultemailtemplates)
 	}
 	s.signed = Signed("signed", s.Signatory("signed"))
+	s.Times = NewTimes(s)
 }
 
 func (s *Manager) Init(a *flotilla.App) {
@@ -164,7 +166,7 @@ func (s *Manager) secret(forSalt string) string {
 }
 
 func (s *Manager) newSignatory(name, method string) token.Signatory {
-	return token.NewSignatory(name, method, s.secret(name))
+	return token.NewSignatory(name, method, s.secret(name), s.Setting("timestamp_format"))
 }
 
 func (s *Manager) Token(from string, claims ...string) string {

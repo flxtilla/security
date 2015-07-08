@@ -11,6 +11,8 @@ import (
 
 var TimeFunc = time.Now
 
+var TimeZone *time.Location = time.Now().Local().Location()
+
 type Keyfunc func(*Token) (interface{}, error)
 
 type Token struct {
@@ -114,17 +116,28 @@ func Parse(tokenString string, keyFunc Keyfunc) (*Token, error) {
 
 	// Check expiration times
 	vErr := &ValidationError{}
-	now := TimeFunc().Unix()
-	if exp, ok := token.Claims["exp"].(float64); ok {
-		if now > int64(exp) {
-			vErr.err = "token is expired"
-			vErr.Errors |= ValidationErrorExpired
+	now := TimeFunc()
+	var format string
+	format, ok := token.Claims["timestamp_format"].(string)
+	if !ok {
+		format = time.UnixDate
+	}
+	if exp, ok := token.Claims["exp"].(string); ok {
+		expires, err := time.ParseInLocation(format, exp, TimeZone)
+		if err == nil {
+			if now.After(expires) {
+				vErr.err = "token is expired"
+				vErr.Errors |= ValidationErrorExpired
+			}
 		}
 	}
-	if nbf, ok := token.Claims["nbf"].(float64); ok {
-		if now < int64(nbf) {
-			vErr.err = "token is not valid yet"
-			vErr.Errors |= ValidationErrorNotValidYet
+	if nbf, ok := token.Claims["nbf"].(string); ok {
+		before, err := time.ParseInLocation(format, nbf, TimeZone)
+		if err == nil {
+			if now.Before(before) {
+				vErr.err = "token is not valid yet"
+				vErr.Errors |= ValidationErrorNotValidYet
+			}
 		}
 	}
 

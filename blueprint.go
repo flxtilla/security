@@ -169,8 +169,8 @@ func postResetPassword(f flotilla.Ctx) {
 			usr := s.Get(claimString(t.Claims["forUser"]))
 			newpassword := formPassword(form, "confirmable-one")
 			usr.Update("password", newpassword)
-			if s.BoolSetting("send_password_reset_notice_email") {
-				//s.sendNotice(f, form, "getResetToken", "reset_password")
+			if s.BoolSetting("notify_password_reset") {
+				s.sendNotice(f, form, "getResetToken", "reset_password")
 			}
 			remember, _ := formRememberMe(form)
 			s.LoginUser(usr, remember, f)
@@ -192,7 +192,7 @@ func postChangePassword(f flotilla.Ctx) {
 			newpassword := formPassword(form, "confirmable-one")
 			usr.Update("password", newpassword)
 			if s.BoolSetting("notify_password_change") {
-				//s.sendNotice(f, form, "getResetToken", "reset_password")
+				s.sendNotice(f, form, "getResetToken", "reset_password")
 			}
 			s.redirectAfter(f, form, "change_password")
 		},

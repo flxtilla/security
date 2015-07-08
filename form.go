@@ -33,8 +33,13 @@ func (s *securityform) Fresh(claims ...interface{}) Form {
 	newform.m = s.m
 	newform.Form = s.Form.New()
 	sf := s.signed()
+	claims = append(claims, s.expiration(), issuedat())
 	newform.Form.Fields(sf.New(claims...))
 	return &newform
+}
+
+func (s *securityform) expiration() string {
+	return s.m.Times.Expiration("leased_token_duration")
 }
 
 func (s *securityform) signed() fork.Field {

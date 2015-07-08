@@ -1,6 +1,10 @@
 package token
 
-import "strings"
+import (
+	"fmt"
+	"math/rand"
+	"strings"
+)
 
 type Signatory interface {
 	Name() string
@@ -9,11 +13,12 @@ type Signatory interface {
 	SignedString(...string) string
 }
 
-func NewSignatory(name, method, key string) Signatory {
+func NewSignatory(name, method, key, timestamp string) Signatory {
 	return &signatory{
 		name:    name,
 		signing: GetSigningMethod(method),
 		key:     []byte(key),
+		format:  timestamp,
 	}
 }
 
@@ -21,6 +26,7 @@ type signatory struct {
 	name    string
 	signing SigningMethod
 	key     []byte
+	format  string
 }
 
 func (s *signatory) Name() string {
@@ -29,6 +35,8 @@ func (s *signatory) Name() string {
 
 func (s *signatory) Token(items ...string) *Token {
 	tkn := New(s.signing)
+	items = append(items, fmt.Sprintf("timestamp_format:%s", s.format))
+	items = append(items, fmt.Sprintf("nonce:%s", nonce(20)))
 	mkClaims(tkn, items)
 	return tkn
 }
@@ -58,4 +66,14 @@ func (s *signatory) keyfunc() Keyfunc {
 
 func (s *signatory) Valid(token string) (*Token, error) {
 	return Parse(token, s.keyfunc())
+}
+
+var random = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$%^&*()")
+
+func nonce(n int) string {
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = random[rand.Intn(len(random))]
+	}
+	return string(b)
 }

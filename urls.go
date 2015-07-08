@@ -1,6 +1,7 @@
 package security
 
 import (
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -58,7 +59,7 @@ func (u *urls) BlueprintUrl(k string) string {
 		var j []string
 		j = append(j, u.prefix)
 		j = append(j, ur)
-		return filepath.ToSlash(strings.Join(j, ""))
+		return path.Clean(filepath.ToSlash(strings.Join(j, "")))
 	}
 	return "/"
 }

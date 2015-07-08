@@ -3,6 +3,8 @@ package security
 import (
 	"fmt"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/thrisp/flotilla"
 	"github.com/thrisp/fork"
@@ -64,20 +66,6 @@ func (s *Manager) nxtAbsolute(r *http.Request, form Form) string {
 	return nxt
 }
 
-func ctxBool(f flotilla.Ctx, key string) (bool, error) {
-	b, _ := f.Call("get", key)
-	if ret, ok := b.(bool); ok {
-		return ret, nil
-	}
-	return false, fmt.Errorf("Ctx value %s does not exist or is not a boolean value", key)
-}
-
-//func UpdatePassword(f Form) (user.User, error) {
-//	usr := formUser(f)
-//	newpassword := formPassword(f, "confirmable-one")
-//	return usr, usr.Update("password", newpassword)
-//}
-
 func tokenFromUrl(f flotilla.Ctx, key string) string {
 	t, _ := f.Call("paramString", key)
 	return t.(string)
@@ -90,9 +78,11 @@ func claimString(i interface{}) string {
 	return ""
 }
 
-func claimBool(i interface{}) bool {
-	if ret, ok := i.(bool); ok {
-		return ret
+func claimBool(in interface{}) bool {
+	if rm, ok := in.(string); ok {
+		if remember, err := strconv.ParseBool(rm); err == nil {
+			return remember
+		}
 	}
 	return false
 }
@@ -104,4 +94,8 @@ func validUserToken(s *Manager, tkn *token.Token) (user.User, bool) {
 		return usr, claimBool(remember)
 	}
 	return nil, false
+}
+
+func issuedat() string {
+	return fmt.Sprintf("iat:%s", time.Now().String())
 }

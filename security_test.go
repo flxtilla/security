@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/thrisp/flotilla"
 	"github.com/thrisp/security/principal"
 	"github.com/thrisp/security/token"
@@ -28,7 +27,7 @@ func testApp(m *Manager) *flotilla.App {
 func testManager(settings ...string) *Manager {
 	settings = append(
 		settings,
-		"after_login_url:/after/login/",
+		"after_login_url:/after/login",
 		"after_logout_url:/after/logout",
 		"after_passwordless_url:/after/passwordless/request",
 		"after_passwordless_token_url:/after/passwordless/login",
@@ -206,8 +205,7 @@ func mkPost(r *http.Request, values string) {
 }
 
 func mkTokenPost(r *http.Request, values string, token string) {
-	tv := fmt.Sprintf("%s&&signed=%s", values, token)
-	mkPost(r, tv)
+	mkPost(r, fmt.Sprintf("%s&&signed=%s", values, token))
 }
 
 func testHead(t *testing.T, r *httptest.ResponseRecorder, get string, expected string) {
@@ -269,13 +267,6 @@ func testFlash(t *testing.T, c flotilla.Ctx, category string, expected string) {
 func testFlashManage(t *testing.T, category string, expected string) flotilla.Manage {
 	return func(c flotilla.Ctx) {
 		testFlash(t, c, category, expected)
-	}
-}
-
-func flashSpew() flotilla.Manage {
-	return func(c flotilla.Ctx) {
-		fl, _ := c.Call("flasher")
-		spew.Dump(fl)
 	}
 }
 
@@ -349,11 +340,11 @@ func TestLoginLogout(t *testing.T) {
 	)
 	exp3.SetPost(
 		func(t *testing.T, r *httptest.ResponseRecorder) {
-			testHead(t, r, "Location", "/test/after/login/")
+			testHead(t, r, "Location", "/test/after/login")
 		},
 	)
 	exp4, _ := flotilla.NewExpectation(
-		200, "GET", "/test/after/login/",
+		200, "GET", "/test/after/login",
 		func(t *testing.T) flotilla.Manage {
 			return LoginRequired(func(c flotilla.Ctx) {
 				testCurrentUser(t, c, "test-0")
@@ -368,7 +359,7 @@ func TestLoginLogout(t *testing.T) {
 	)
 	exp5.SetPost(
 		func(t *testing.T, r *httptest.ResponseRecorder) {
-			testHead(t, r, "Location", "/test/after/login/")
+			testHead(t, r, "Location", "/test/after/login")
 		},
 	)
 	exp6 := LogoutExpectation("/test/logout", "/test/after/logout")
@@ -528,7 +519,7 @@ func TestChangePassword(t *testing.T) {
 	)
 	exp2.SetPost(
 		func(t *testing.T, r *httptest.ResponseRecorder) {
-			testHead(t, r, "Location", "/test/after/login/")
+			testHead(t, r, "Location", "/test/after/login")
 		},
 	)
 	exp3, _ := flotilla.NoTanage(200, "GET", "/test/change")
