@@ -35,6 +35,12 @@ var defaultSettings Settings = Settings{
 	"RECOVERABLE":                "f",
 	"PASSWORDLESS":               "f",
 	"CHANGEABLE":                 "f",
+	"FORM_MENU":                  "t",
+	"NOTIFY_PASSWORD_CHANGE":     "t",
+	"NOTIFY_PASSWORD_RESET":      "t",
+	"SIGNING_METHOD":             "HS256",
+	"TIMESTAMP_FORMAT":           "Mon Jan _2 15:04:05 MST 2006",
+	"SIGNATORY_ENCRYPTION_KEY":   "1234567890abcdef",
 	"DEFAULT_SALT":               "default-salt",
 	"PASSWORDLESS_SALT":          "login-salt",
 	"SEND_CONFIRM_SALT":          "confirm-salt",
@@ -46,11 +52,6 @@ var defaultSettings Settings = Settings{
 	"RESET_DURATION":             "60h",
 	"SEND_RESET_DURATION":        "60h",
 	"CHANGE_DURATION":            "60h",
-	"FORM_MENU":                  "t",
-	"NOTIFY_PASSWORD_CHANGE":     "t",
-	"NOTIFY_PASSWORD_RESET":      "t",
-	"SIGNING_METHOD":             "HS256",
-	"TIMESTAMP_FORMAT":           "Mon Jan _2 15:04:05 MST 2006",
 }
 
 func storekey(key string) string {

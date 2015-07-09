@@ -62,7 +62,6 @@ func (t *Token) SigningString() (string, error) {
 		if jsonValue, err = json.Marshal(source); err != nil {
 			return "", err
 		}
-
 		parts[i] = EncodeSegment(jsonValue)
 	}
 	return strings.Join(parts, "."), nil
@@ -118,12 +117,16 @@ func Parse(tokenString string, keyFunc Keyfunc) (*Token, error) {
 	vErr := &ValidationError{}
 	now := TimeFunc()
 	var format string
-	format, ok := token.Claims["timestamp_format"].(string)
+	format, ok := token.Claims["tsf"].(string)
 	if !ok {
 		format = time.UnixDate
 	}
 	if exp, ok := token.Claims["exp"].(string); ok {
 		expires, err := time.ParseInLocation(format, exp, TimeZone)
+		if err != nil {
+			vErr.err = err.Error()
+			vErr.Errors |= ValidationErrorInvalidTime
+		}
 		if err == nil {
 			if now.After(expires) {
 				vErr.err = "token is expired"
@@ -133,6 +136,10 @@ func Parse(tokenString string, keyFunc Keyfunc) (*Token, error) {
 	}
 	if nbf, ok := token.Claims["nbf"].(string); ok {
 		before, err := time.ParseInLocation(format, nbf, TimeZone)
+		if err != nil {
+			vErr.err = err.Error()
+			vErr.Errors |= ValidationErrorInvalidTime
+		}
 		if err == nil {
 			if now.Before(before) {
 				vErr.err = "token is not valid yet"
@@ -147,11 +154,10 @@ func Parse(tokenString string, keyFunc Keyfunc) (*Token, error) {
 		vErr.Errors |= ValidationErrorSignatureInvalid
 	}
 
-	if vErr.valid() {
+	if vErr.Valid() {
 		token.Valid = true
 		return token, nil
 	}
-
 	return token, vErr
 }
 

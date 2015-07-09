@@ -97,10 +97,3 @@ func (u *urls) Relative(f flotilla.Ctx, route string, params ...string) string {
 	url, _ := f.Call("urlfor", route, false, params)
 	return url.(string)
 }
-
-//a.AddCtxProcessor("urls", securityUrls(s.Urls))
-//func securityUrls(u Urls) func(flotilla.Ctx) Urls {
-//	return func(c flotilla.Ctx) Urls {
-//		return u
-//	}
-//}

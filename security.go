@@ -166,7 +166,12 @@ func (s *Manager) secret(forSalt string) string {
 }
 
 func (s *Manager) newSignatory(name, method string) token.Signatory {
-	return token.NewSignatory(name, method, s.secret(name), s.Setting("timestamp_format"))
+	return token.NewSignatory(
+		name,
+		s.Setting("timestamp_format"),
+		s.Setting("signatory_encryption_key"),
+		token.NewSigner(method, s.secret(name)),
+	)
 }
 
 func (s *Manager) Token(from string, claims ...string) string {

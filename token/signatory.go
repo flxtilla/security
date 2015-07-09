@@ -1,9 +1,15 @@
 package token
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	cr "crypto/rand"
+	"encoding/base64"
 	"fmt"
-	"math/rand"
+	"io"
+	mr "math/rand"
 	"strings"
+	"time"
 )
 
 type Signatory interface {
@@ -11,22 +17,37 @@ type Signatory interface {
 	Token(...string) *Token
 	Valid(string) (*Token, error)
 	SignedString(...string) string
+	Signer
 }
 
-func NewSignatory(name, method, key, timestamp string) Signatory {
+func NewSignatory(name, timestamp, key string, sr Signer) Signatory {
 	return &signatory{
-		name:    name,
-		signing: GetSigningMethod(method),
-		key:     []byte(key),
-		format:  timestamp,
+		name:            name,
+		timestampFormat: timestamp,
+		timestampClaim:  fmt.Sprintf("tsf:%s", timestamp),
+		key:             mkEncryptionKey(key),
+		Signer:          sr,
 	}
 }
 
+func mkEncryptionKey(key string) []byte {
+	var ret string
+	k := len(key)
+	switch k {
+	case 16, 24, 32:
+		ret = key
+	default:
+		panic("Length of signatory encryption key MUST be 16, 24, 32")
+	}
+	return []byte(ret)
+}
+
 type signatory struct {
-	name    string
-	signing SigningMethod
-	key     []byte
-	format  string
+	name            string
+	timestampFormat string
+	timestampClaim  string
+	key             []byte
+	Signer
 }
 
 func (s *signatory) Name() string {
@@ -34,19 +55,22 @@ func (s *signatory) Name() string {
 }
 
 func (s *signatory) Token(items ...string) *Token {
-	tkn := New(s.signing)
-	items = append(items, fmt.Sprintf("timestamp_format:%s", s.format))
-	items = append(items, fmt.Sprintf("nonce:%s", nonce(20)))
+	tkn := New(s)
+	items = append(items, s.timestampClaim, s.iat())
 	mkClaims(tkn, items)
 	return tkn
 }
 
+func (s *signatory) iat() string {
+	return fmt.Sprintf("iat:%s", time.Now().Format(s.timestampFormat))
+}
+
 func (s *signatory) SignedString(claims ...string) string {
-	signed, err := s.Token(claims...).SignedString(s.key)
+	signed, err := s.Token(claims...).SignedString(s.Signer.Key())
 	if err != nil {
 		return err.Error()
 	}
-	return signed
+	return s.Encrypt(signed)
 }
 
 func mkClaims(t *Token, items []string) {
@@ -58,22 +82,48 @@ func mkClaims(t *Token, items []string) {
 	}
 }
 
-func (s *signatory) keyfunc() Keyfunc {
-	return func(*Token) (interface{}, error) {
-		return s.key, nil
-	}
-}
-
 func (s *signatory) Valid(token string) (*Token, error) {
-	return Parse(token, s.keyfunc())
+	tkn, err := s.Decrypt(token)
+	if err != nil {
+		return nil, err
+	}
+	return Parse(tkn, s.Signer.Keyfunc())
 }
 
-var random = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$%^&*()")
-
-func nonce(n int) string {
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = random[rand.Intn(len(random))]
+func (s *signatory) Encrypt(tokenString string) string {
+	c, err := aes.NewCipher([]byte(s.key))
+	if err != nil {
+		panic(err.Error())
 	}
-	return string(b)
+	out := make([]byte, aes.BlockSize+len(tokenString))
+	iv := out[:aes.BlockSize]
+	if _, err := io.ReadFull(cr.Reader, iv); err != nil {
+		panic(err)
+	}
+	cfb := cipher.NewCFBEncrypter(c, iv)
+	cfb.XORKeyStream(out[aes.BlockSize:], []byte(tokenString))
+	return base64.URLEncoding.EncodeToString(out)
+}
+
+func (s *signatory) Decrypt(tokenString string) (string, error) {
+	tkn, err := base64.URLEncoding.DecodeString(tokenString)
+	if err != nil {
+		return "", err
+	}
+	c, err := aes.NewCipher([]byte(s.key))
+	if err != nil {
+		return "", err
+	}
+	if len(tkn) < aes.BlockSize {
+		return "", ErrTokenLength
+	}
+	iv := tkn[:aes.BlockSize]
+	tkn = tkn[aes.BlockSize:]
+	cfb := cipher.NewCFBDecrypter(c, iv)
+	cfb.XORKeyStream(tkn, tkn)
+	return string(tkn), nil
+}
+
+func init() {
+	mr.Seed(time.Now().UTC().UnixNano())
 }

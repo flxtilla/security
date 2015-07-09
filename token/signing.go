@@ -18,3 +18,31 @@ func GetSigningMethod(alg string) (method SigningMethod) {
 	}
 	return
 }
+
+type Signer interface {
+	SigningMethod
+	Key() []byte
+	Keyfunc() Keyfunc
+}
+
+func NewSigner(method, key string) Signer {
+	return &signer{
+		SigningMethod: GetSigningMethod(method),
+		key:           []byte(key),
+	}
+}
+
+type signer struct {
+	SigningMethod
+	key []byte
+}
+
+func (s *signer) Key() []byte {
+	return s.key
+}
+
+func (s *signer) Keyfunc() Keyfunc {
+	return func(*Token) (interface{}, error) {
+		return s.key, nil
+	}
+}

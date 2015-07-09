@@ -7,6 +7,7 @@ var (
 	ErrInvalidKey       = errors.New("key is invalid or of invalid type")
 	ErrHashUnavailable  = errors.New("the requested hash function is unavailable")
 	ErrNoTokenInRequest = errors.New("no token present in request")
+	ErrTokenLength      = errors.New("token length is wrong")
 )
 
 // The errors that might occur when parsing and validating a token
@@ -14,6 +15,7 @@ const (
 	ValidationErrorMalformed        uint32 = 1 << iota // Token is malformed
 	ValidationErrorUnverifiable                        // Token could not be verified because of signing problems
 	ValidationErrorSignatureInvalid                    // Signature validation failed
+	ValidationErrorInvalidTime                         // Parsing time failed
 	ValidationErrorExpired                             // Exp validation failed
 	ValidationErrorNotValidYet                         // NBF validation failed
 )
@@ -33,7 +35,7 @@ func (e ValidationError) Error() string {
 }
 
 // No errors
-func (e *ValidationError) valid() bool {
+func (e *ValidationError) Valid() bool {
 	if e.Errors > 0 {
 		return false
 	}

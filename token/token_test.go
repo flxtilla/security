@@ -38,7 +38,6 @@ var tokenTestData = []struct {
 		"", // autogen
 		defaultKeyFunc,
 		map[string]interface{}{"foo": "bar", "exp": tMinus(100)},
-		//map[string]interface{}{"foo": "bar", "exp": float64(time.Now().Unix() - 100)},
 		false,
 		ValidationErrorExpired,
 	},
