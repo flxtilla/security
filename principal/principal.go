@@ -74,7 +74,7 @@ func manager(c flotilla.Ctx) *Manager {
 	return p.(*Manager)
 }
 
-// Sufficient wraps a flotilla HandlerFunc with permissions, allowing
+// Sufficient wraps a flotilla Manage with permissions, allowing
 // access if the current identity is allowed for any given permission.
 func Sufficient(h flotilla.Manage, perms ...Permission) flotilla.Manage {
 	return func(c flotilla.Ctx) {
@@ -92,7 +92,7 @@ func Sufficient(h flotilla.Manage, perms ...Permission) flotilla.Manage {
 	}
 }
 
-// Necessary wraps a flotilla HandlerFunc with permissions, requiring
+// Necessary wraps a flotilla Manage with permissions, requiring
 // that the current identity satifies all permissions fully before access.
 func Necessary(h flotilla.Manage, permissions ...Permission) flotilla.Manage {
 	return func(c flotilla.Ctx) {

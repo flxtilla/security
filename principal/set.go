@@ -1,4 +1,4 @@
-// a local implementation of gopkg.in/fatih/set.v0
+// A local implementation of gopkg.in/fatih/set.v0
 package principal
 
 import (
@@ -29,16 +29,13 @@ type Set interface {
 }
 
 type set struct {
-	M map[interface{}]struct{} // struct{} doesn't take up space
-	l sync.RWMutex             // we name it because we don't want to expose it
+	M map[interface{}]struct{}
+	l sync.RWMutex
 }
 
 func NewSet(items ...interface{}) Set {
 	s := &set{}
 	s.M = make(map[interface{}]struct{})
-
-	// Ensure interface compliance
-	//var _ Interface = s
 
 	s.Add(items...)
 	return s
@@ -88,7 +85,6 @@ func (s *set) Pop() interface{} {
 }
 
 func (s *set) Has(items ...interface{}) bool {
-	// assume checked for empty item, which not exist
 	if len(items) == 0 {
 		return false
 	}
@@ -124,13 +120,11 @@ func (s *set) IsEqual(t Set) bool {
 	s.l.RLock()
 	defer s.l.RUnlock()
 
-	// Force locking only if given set is threadsafe.
 	if conv, ok := t.(*set); ok {
 		conv.l.RLock()
 		defer conv.l.RUnlock()
 	}
 
-	// return false if they are no the same size
 	if sameSize := len(s.M) == t.Size(); !sameSize {
 		return false
 	}
@@ -144,7 +138,6 @@ func (s *set) IsEqual(t Set) bool {
 	return equal
 }
 
-// IsSuperset tests whether t is a superset of s.
 func (s *set) IsSuperset(t Set) bool {
 	return t.IsSubset(s)
 }
@@ -209,7 +202,6 @@ func (s *set) IsEmpty() bool {
 	return s.Size() == 0
 }
 
-// String returns a string representation of s
 func (s *set) String() string {
 	t := make([]string, 0, len(s.List()))
 	for _, item := range s.List() {
@@ -219,7 +211,6 @@ func (s *set) String() string {
 	return fmt.Sprintf("[%s]", strings.Join(t, ", "))
 }
 
-// helpful to not write everywhere struct{}{}
 var keyExists = struct{}{}
 
 // Union is the merger of multiple sets. It returns a new set with all the

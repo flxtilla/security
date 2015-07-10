@@ -73,7 +73,7 @@ func Unauthenticated(f flotilla.Ctx, s *Manager) {
 	if h := s.login.Reloaders["unauthenticated"]; h != nil {
 		h(f)
 	}
-	f.Call("redirect", 303, s.BlueprintUrl("login_url"))
+	f.Call("redirect", 303, s.BlueprintUrl(s.ManagerLogin()))
 }
 
 func getLogout(f flotilla.Ctx) {

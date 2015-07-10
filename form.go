@@ -33,7 +33,7 @@ func (s *securityform) Fresh(claims ...interface{}) Form {
 	newform.m = s.m
 	newform.Form = s.Form.New()
 	sf := s.signed()
-	claims = append(claims, s.expiration(), issuedat())
+	claims = append(claims, s.expiration())
 	newform.Form.Fields(sf.New(claims...))
 	return &newform
 }

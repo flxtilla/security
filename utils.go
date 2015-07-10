@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/thrisp/flotilla"
 	"github.com/thrisp/fork"
@@ -94,8 +93,4 @@ func validUserToken(s *Manager, tkn *token.Token) (user.User, bool) {
 		return usr, claimBool(remember)
 	}
 	return nil, false
-}
-
-func issuedat() string {
-	return fmt.Sprintf("iat:%s", time.Now().String())
 }

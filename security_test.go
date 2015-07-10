@@ -399,7 +399,6 @@ func testBuffer(t *testing.T, b *bytes.Buffer, expected string) {
 func TestPasswordlessLoginLogout(t *testing.T) {
 	a := testApp(testManager("passwordless:t"))
 	var tkn string
-	exp0 := BaseExpectation()
 	exp1, _ := flotilla.NoTanage(200, "GET", "/test/p/login")
 	exp1.SetPost(
 		func(t *testing.T, r *httptest.ResponseRecorder) {
@@ -423,7 +422,7 @@ func TestPasswordlessLoginLogout(t *testing.T) {
 			testHead(t, r, "LOCATION", "/test/after/passwordless/request")
 		},
 	)
-	flotilla.SessionPerformer(t, a, exp0, exp1, exp2).Perform()
+	flotilla.SessionPerformer(t, a, exp1, exp2).Perform()
 	exp3, _ := flotilla.NoTanage(302, "GET", fmt.Sprintf("/test/p/login/%s", tk.String()))
 	exp3.SetPost(
 		func(t *testing.T, r *httptest.ResponseRecorder) {
@@ -443,7 +442,7 @@ func TestPasswordlessLoginLogout(t *testing.T) {
 }
 
 func TestRecover(t *testing.T) {
-	a := testApp(testManager("recoverable:t"))
+	a := testApp(testManager("passwordless:f", "recoverable:t"))
 	var tkn string
 	exp0 := BaseExpectation()
 	exp1, _ := flotilla.NoTanage(200, "GET", "/test/send/reset")

@@ -91,7 +91,7 @@ func (s *Manager) sendNotice(f flotilla.Ctx, form Form, forRoute string, templat
 	}
 	rm := fmt.Sprintf("remember:%s", remember)
 	expiration := s.Expiration(fmt.Sprintf("%s_DURATION", tag))
-	sendToken := s.Token(tag, ut, rm, expiration, issuedat())
+	sendToken := s.Token(tag, ut, rm, expiration)
 	link := s.External(f, forRoute, sendToken)
 	return s.SendMail(template, email, link)
 }
