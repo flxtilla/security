@@ -50,22 +50,26 @@ func (s *securityform) url() string {
 	return s.m.BlueprintUrl(fmt.Sprintf("%s_url", s.Tag()))
 }
 
+func (s *securityform) formurl(url, label string) string {
+	return fmt.Sprintf(`<li><a href="%s">%s</a></li>`, s.m.BlueprintUrl(url), label)
+}
+
 func (s *securityform) menu() *bytes.Buffer {
 	b := new(bytes.Buffer)
 	m := s.m
 	var avail []string
 	tag := s.Tag()
 	if !existsIn(tag, "login", "passwordless") {
-		avail = append(avail, m.FmtSetting(`<li><a href="%s">Login</a></li>`, "login_url"))
+		avail = append(avail, s.formurl(s.m.ManagerLogin(), "Login"))
 	}
 	if m.BoolSetting("registerable") && !existsIn(tag, "register") {
-		avail = append(avail, m.FmtSetting(`<li><a href="%s">Register</a></li>`, "register_url"))
+		avail = append(avail, s.formurl("register_url", "Register"))
 	}
 	if m.BoolSetting("recoverable") && !existsIn(tag, "reset", "send_reset") {
-		avail = append(avail, m.FmtSetting(`<li><a href="%s">Forgot Password?</a></li>`, "send_reset_url"))
+		avail = append(avail, s.formurl("send_reset_url", "Forgot Password?"))
 	}
 	if m.BoolSetting("confirmable") && !existsIn(tag, "confirm_user", "send_confirm") {
-		avail = append(avail, m.FmtSetting(`<li><a href="%s">Confirm Account</a></li>`, "send_confirm_url"))
+		avail = append(avail, s.formurl("send_confirm_url", "Confirm Account"))
 	}
 	if len(avail) > 0 {
 		b.WriteString(`<div class="security-form-menu">`)

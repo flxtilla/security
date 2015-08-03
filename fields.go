@@ -220,12 +220,11 @@ func (s *signed) Token() string {
 	return s.signatory.SignedString(s.claims...)
 }
 
-var InvalidSignedField = SecurityError("Signed field is invalid: %s").Out
+var InvalidSignedField = SecurityError("Invalid signed field: %s").Out
 
 func ValidateSigned(s *signed) error {
 	if s.Validateable() {
 		if _, err := s.signatory.Valid(s.returned); err != nil {
-			//spew.Dump(t, err, s.returned)
 			return InvalidSignedField(err.Error())
 		}
 	}
