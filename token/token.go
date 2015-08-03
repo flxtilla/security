@@ -11,7 +11,7 @@ import (
 
 var TimeFunc = time.Now
 
-var TimeZone *time.Location = time.Now().Local().Location()
+var TimeZone *time.Location
 
 type Keyfunc func(*Token) (interface{}, error)
 
@@ -190,4 +190,8 @@ func DecodeSegment(seg string) ([]byte, error) {
 	}
 
 	return base64.URLEncoding.DecodeString(seg)
+}
+
+func init() {
+	TimeZone = time.Now().Local().Location()
 }
