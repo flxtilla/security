@@ -40,7 +40,7 @@ var defaultSettings Settings = Settings{
 	"NOTIFY_PASSWORD_RESET":      "t",
 	"SIGNING_METHOD":             "HS256",
 	"TIMESTAMP_FORMAT":           "Mon Jan _2 15:04:05 MST 2006",
-	"SIGNATORY_ENCRYPTION_KEY":   "1234567890abcdef",
+	"SIGNATORY_ENCRYPTION_KEY":   "1234567890abcdefG",
 	"DEFAULT_SALT":               "default-salt",
 	"PASSWORDLESS_SALT":          "login-salt",
 	"SEND_CONFIRM_SALT":          "confirm-salt",
