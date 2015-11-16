@@ -59,8 +59,8 @@ func storekey(key string) string {
 }
 
 func (s *Manager) Setting(key string) string {
-	if item, ok := s.App.Env.Store[storekey(key)]; ok {
-		return item.Value
+	if item, err := s.App.Env.Store.Query(storekey(key)); err == nil {
+		return item.String()
 	}
 	if item, ok := s.Settings[strings.ToUpper(key)]; ok {
 		return item

@@ -8,8 +8,8 @@ import (
 )
 
 func (l *Manager) Setting(key string) string {
-	if item, ok := l.App.Env.Store[storekey(key)]; ok {
-		return item.Value
+	if item, err := l.App.Env.Store.Query(storekey(key)); err == nil {
+		return item.String()
 	}
 	if item, ok := l.Settings[strings.ToUpper(key)]; ok {
 		return item
