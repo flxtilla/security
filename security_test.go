@@ -168,6 +168,25 @@ func (u *testUser) Update(key, value string) error {
 	return errors.New("only Local or Password may be updated")
 }
 
+func GeneralExpectation(fn func(*testing.T, flotilla.Ctx, *Manager)) (flotilla.Expectation, error) {
+	return flotilla.NewExpectation(
+		200,
+		"GET",
+		"/security",
+		func(t *testing.T) flotilla.Manage {
+			return func(c flotilla.Ctx) {
+				s, _ := c.Call("security")
+				if sec, ok := s.(*Manager); ok {
+					fn(t, c, sec)
+				} else {
+					t.Error("security manager was not found")
+				}
+				c.Call("serveplain", 200, "ok")
+			}
+		},
+	)
+}
+
 func TestExtension(t *testing.T) {
 	var exists bool = false
 	a := testApp(New())
@@ -474,14 +493,18 @@ func TestRecover(t *testing.T) {
 	exp3.SetPost(
 		func(t *testing.T, r *httptest.ResponseRecorder) {
 			tkn = extractSignedToken(r.Body.Bytes())
+			//spew.Dump(tkn)
+			//spew.Dump(sig)
 			ctkn, err := sig.Valid(tkn)
 			if err != nil {
 				t.Error(err.Error())
 			}
+			//spew.Dump(ctkn)
 			if ctkn.Claims["forUser"] != "test-0@test.com" {
 				t.Errorf("signed token claims expected forUser=test-0@test.com, but was %s", ctkn.Claims["forUser"])
 			}
 			testBody(t, r, `<form class="security-form" action="/test/reset"`)
+			//spew.Dump(r)
 		},
 	)
 	exp4, _ := flotilla.NoTanage(302, "POST", "/test/reset")

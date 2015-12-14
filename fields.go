@@ -1,6 +1,7 @@
 package security
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/mail"
@@ -32,7 +33,6 @@ func (s *securityName) Copy() *securityName {
 }
 
 func NewUserName(s *Manager, name string, options ...string) fork.Field {
-	//user name exists validater
 	return fork.TextField(name, []interface{}{fork.ValidEmail}, nil, options...)
 }
 
@@ -62,8 +62,9 @@ type userName struct {
 	fork.Processor
 }
 
-func (u *userName) New(i ...interface{}) fork.Field {
+func (u *userName) New(fc ...fork.FieldConfig) fork.Field {
 	var newfield userName = *u
+	newfield.securityName = u.securityName.Copy()
 	newfield.UserName = ""
 	newfield.user = user.AnonymousUser
 	newfield.SetValidateable(false)
@@ -80,7 +81,7 @@ func (u *userName) Set(r *http.Request) {
 	u.SetValidateable(true)
 }
 
-var InvalidEmail = SecurityError(`Invalid email address: %s`).Out
+var InvalidEmail = Srror(`Invalid email address: %s`).Out
 
 func ValidEmail(u *userName) error {
 	if u.Validateable() {
@@ -146,8 +147,9 @@ func nextfilter(in string) string {
 	return in
 }
 
-func (n *next) New(i ...interface{}) fork.Field {
+func (n *next) New(fc ...fork.FieldConfig) fork.Field {
 	var newfield next = *n
+	newfield.securityName = n.securityName.Copy()
 	newfield.Url = ""
 	newfield.SetValidateable(false)
 	return &newfield
@@ -189,21 +191,25 @@ func Signed(name string, s token.Signatory, options ...string) fork.Field {
 	}
 }
 
-func (s *signed) New(i ...interface{}) fork.Field {
-	var newfield signed = *s
-	newfield.returned = ""
-	newfield.claims = toStr(i)
-	newfield.SetValidateable(false)
-	return &newfield
+func Claims(claims ...string) func(f fork.Field) error {
+	return func(f fork.Field) error {
+		if fd, ok := f.(*signed); ok {
+			fd.claims = claims
+			return nil
+		}
+		return errors.New("not a signed field")
+	}
 }
 
-func toStr(i []interface{}) []string {
-	var ret []string
-	for _, v := range i {
-		if st, ok := v.(string); ok {
-			ret = append(ret, st)
-		}
+func (s *signed) New(fc ...fork.FieldConfig) fork.Field {
+	var newfield signed = *s
+	newfield.securityName = s.securityName.Copy()
+	ret := &newfield
+	ret.returned = ""
+	for _, fn := range fc {
+		fn(ret)
 	}
+	ret.SetValidateable(false)
 	return ret
 }
 
@@ -220,7 +226,7 @@ func (s *signed) Token() string {
 	return s.signatory.SignedString(s.claims...)
 }
 
-var InvalidSignedField = SecurityError("Invalid signed field: %s").Out
+var InvalidSignedField = Srror("Invalid signed field: %s").Out
 
 func ValidateSigned(s *signed) error {
 	if s.Validateable() {

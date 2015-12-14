@@ -75,8 +75,3 @@ func (s *Manager) BoolSetting(key string) bool {
 	}
 	return false
 }
-
-func (s *Manager) FmtSetting(base, key string) string {
-	out := s.Setting(key)
-	return fmt.Sprintf(base, out)
-}

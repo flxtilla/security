@@ -11,7 +11,7 @@ import (
 )
 
 type Form interface {
-	Fresh(...interface{}) Form
+	Fresh(...string) Form
 	fork.Form
 }
 
@@ -28,13 +28,13 @@ func (m *Manager) NewForm(tag string, c []interface{}, fields ...fork.Field) For
 	}
 }
 
-func (s *securityform) Fresh(claims ...interface{}) Form {
+func (s *securityform) Fresh(claims ...string) Form {
 	var newform securityform = *s
 	newform.m = s.m
 	newform.Form = s.Form.New()
 	sf := s.signed()
 	claims = append(claims, s.expiration())
-	newform.Form.Fields(sf.New(claims...))
+	newform.Form.Fields(sf.New(Claims(claims...)))
 	return &newform
 }
 
@@ -84,9 +84,9 @@ func (s *securityform) menu() *bytes.Buffer {
 	return b
 }
 
-func (s *securityform) checkederrors() *bytes.Buffer {
+func (s *securityform) checkedErrors() *bytes.Buffer {
 	b := new(bytes.Buffer)
-	_, err := s.Check(s)
+	err := s.Check(s)
 	if err != nil {
 		b.WriteString(`<div class="security-form-errors">`)
 		b.WriteString(err.Error())
@@ -100,8 +100,8 @@ const formhead = `<form class="security-form" action="%s" method="POST" name="%s
 func (s *securityform) WrapForm(e *bytes.Buffer) *bytes.Buffer {
 	b := new(bytes.Buffer)
 	b.Write([]byte(fmt.Sprintf(formhead, s.url(), s.Tag())))
-	if s.Checkable() {
-		b.ReadFrom(s.checkederrors())
+	if s.Checkable(s) {
+		b.ReadFrom(s.checkedErrors())
 	}
 	b.ReadFrom(e)
 	if s.m.BoolSetting("form_menu") {
@@ -114,7 +114,7 @@ func (s *securityform) WrapForm(e *bytes.Buffer) *bytes.Buffer {
 func (s *securityform) Buffer() *bytes.Buffer {
 	b := new(bytes.Buffer)
 	for _, fd := range s.Fields() {
-		fb, err := fd.Bytes(fd)
+		fb, err := fd.ToBytes(fd)
 		if err == nil {
 			b.ReadFrom(fb)
 		}
@@ -154,7 +154,7 @@ func formRememberMe(f Form) (bool, string) {
 	var s string = "false"
 	v := f.Values()
 	if rm, ok := v["rememberme"]; ok {
-		b = rm.Bool()
+		b = rm.Boolean()
 		s = strconv.FormatBool(b)
 	}
 	return b, s
@@ -177,22 +177,22 @@ func formSigned(f Form) string {
 	return ""
 }
 
-var PasswordMismatch = SecurityError("Provided passwords do not match")
+var PasswordMismatch = Srror("Provided passwords do not match")
 
-func CheckPasswords(f Form) (bool, error) {
+func CheckPasswords(f Form) error {
 	p1 := formPassword(f, "confirmable-one")
 	p2 := formPassword(f, "confirmable-two")
 	if p1 != p2 || p1 == "" || p2 == "" {
-		return false, PasswordMismatch
+		return PasswordMismatch
 	}
-	return true, nil
+	return nil
 }
 
-func CheckUserPassword(f Form) (bool, error) {
+func CheckUserPassword(f Form) error {
 	usr, _ := formUser(f)
 	password := formPassword(f, "user-pass")
 	if err := usr.Authenticate(password); err != nil {
-		return false, err
+		return err
 	}
-	return true, nil
+	return nil
 }

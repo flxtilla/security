@@ -33,11 +33,11 @@ func posted(f flotilla.Ctx, key string, ifvalid IfValid) {
 	s, r := manager(f), request(f)
 	form := s.Forms.byKey(key).Fresh()
 	form.Process(r)
-	valid, _ := form.Check(form)
-	if valid {
+	valid := form.MustCheck(form)
+	if valid == nil {
 		ifvalid(f, s, form)
 	}
-	if !valid {
+	if valid != nil {
 		s.formFail(f, form, fmt.Sprintf("%s.html", key))
 	}
 }

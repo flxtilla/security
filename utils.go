@@ -11,24 +11,6 @@ import (
 	"github.com/thrisp/security/user"
 )
 
-type securityError struct {
-	errf string
-	vals []interface{}
-}
-
-func (f *securityError) Error() string {
-	return fmt.Sprintf("[security] %s", fmt.Sprintf(f.errf, f.vals...))
-}
-
-func (f *securityError) Out(vals ...interface{}) *securityError {
-	f.vals = vals
-	return f
-}
-
-func SecurityError(errf string) *securityError {
-	return &securityError{errf: errf}
-}
-
 func existsIn(s string, l ...string) bool {
 	for _, x := range l {
 		if s == x {

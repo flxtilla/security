@@ -39,7 +39,6 @@ func templateMacro(f Form) func(flotilla.Ctx) template.HTML {
 	return func(c flotilla.Ctx) template.HTML {
 		prev := ctxForm(c, f.Tag())
 		if prev != nil {
-			prev.SetCheckable(true)
 			return prev.Render()
 		}
 		return f.Fresh().Render()

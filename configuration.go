@@ -6,7 +6,7 @@ import (
 	"github.com/thrisp/security/user"
 )
 
-var ConfigurationError = SecurityError(`configuration error: %s`).Out
+var ConfigurationError = Srror(`configuration error: %s`).Out
 
 type Configuration func(*Manager) error
 
